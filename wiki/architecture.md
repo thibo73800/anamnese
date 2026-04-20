@@ -18,15 +18,28 @@ app/
 │   └── review/page.tsx        # RSC: getDueCards(10) → <ReviewSession> (client-side queue)
 ├── auth/callback/route.ts     # PKCE route handler: exchanges ?code= for a session
 ├── api/image-search/route.ts  # server proxy for findImage (avoids exposing keys)
+├── api/v1/                    # public REST API — Bearer auth — see [[api]]
+│   ├── cards/route.ts         # POST (single or batch), GET (list with tag/since/cursor)
+│   ├── cards/[id]/route.ts    # GET, PATCH, DELETE
+│   ├── tags/route.ts          # GET (distinct tag list)
+│   └── stats/route.ts         # GET (learning counters over a 7-day window)
+├── (app)/settings/            # account settings (API keys management UI)
+│   ├── api-keys/page.tsx      # list + create dialog + revoke
+│   └── page.tsx               # redirect → /settings/api-keys
 ├── actions/                   # Server Actions (marked 'use server')
 │   ├── auth.ts                # signup, login, logout
-│   ├── cards.ts               # createCard, updateCard, deleteCard, listCards, submitReview, getDueCards, getDueCardsExcluding, …
+│   ├── cards.ts               # Session-auth wrappers over lib/cards/repository.ts
+│   ├── api-keys.ts            # listApiKeys, createApiKey, revokeApiKey (session-auth)
 │   ├── theme.ts               # refineThemeExplanation (search follow-up Q&A)
 │   └── batch-create.ts        # sendBatchMessage, findImageForDraft, commitSet (/create batch chat)
-├── layout.tsx                 # root layout, manifest, Toaster
+├── layout.tsx                 # root layout, manifest, Toaster, SW registration
 ├── manifest.ts                # dynamic PWA manifest
 ├── icon.tsx / apple-icon.tsx  # icons generated via next/og
 └── globals.css
+
+public/
+└── sw.js                      # minimal no-op service worker (PWA installability only)
+
 ```
 
 ## Key components
@@ -45,6 +58,10 @@ app/
 | `review-session.tsx` (client) | Prefetched card queue + synchronous pop on rate + background refetch. Branches QCM/typing via `deriveMode`. `key={current.id}` on the child → remount between cards. Re-insertion at end of queue **only** on rating=1 (Again). |
 | `batch-creator.tsx` (client) | 2-column layout: conversation (Claude chat) + editable draft set (shared tags + `DraftCardItem[]` + commit button). Plain-text history, tools ephemeral on the server side. |
 | `draft-card-item.tsx` (client) | Draft set item: term / definition / distractors / "Find an image" button (opt-in). No persistence until the set is committed. |
+| `app-nav.tsx` (client) | Responsive header used by `(app)/layout.tsx`: horizontal links on `md`+, hamburger + Sheet on mobile with Install button and Déconnexion. |
+| `ui/sheet.tsx` (client) | Side-anchored drawer primitive (left/right), built on `@base-ui/react/dialog`. Used by `app-nav.tsx`. |
+| `pwa/sw-register.tsx` (client) | Registers `/sw.js` in production. Mounted once from the root layout. |
+| `pwa/install-button.tsx` (client) | Captures `beforeinstallprompt` (Chrome/Edge) or shows an iOS "Share → Add to Home Screen" dialog. Renders nothing when already installed or unsupported. |
 
 ## Layers and responsibilities
 
@@ -52,12 +69,42 @@ app/
 |---|---|---|
 | **Proxy** (`proxy.ts` + `lib/supabase/proxy.ts`) | Refresh session cookie, auth guard | Redirects `/` → `/login` if no user |
 | **Server Components** (pages) | Data fetching + RSC | `search/page.tsx` calls `explainTheme()` |
-| **Server Actions** (`app/actions/*`) | Mutations + auth-checked writes | `createCard`, `submitReview` |
-| **Route Handlers** (`/api/*`, `/auth/callback`) | Plain HTTP endpoints | PKCE callback, image search proxy |
+| **Server Actions** (`app/actions/*`) | Mutations + auth-checked writes | `createCard`, `submitReview`, `createApiKey` |
+| **Route Handlers** (`/api/*`, `/auth/callback`) | Plain HTTP endpoints | PKCE callback, image search proxy, public `/api/v1/*` |
+| **Public API** (`app/api/v1/*` + `lib/api-v1/*` + `lib/api-auth/*`) | Bearer-auth'd REST surface for external clients (Claude Code skill) | `POST /api/v1/cards`, `verifyApiKey`, `withApiKey` |
+| **Cards repository** (`lib/cards/repository.ts`) | Single source of truth for `cards` CRUD; both Server Actions and API routes delegate here | `repoCreateCard`, `repoListCards`, `repoGetStats` |
 | **Client Components** | Interactivity | `CardEditor`, `ReviewCardQcm`, `SearchBar` |
-| **`lib/`** | Pure business logic, no React | `fsrs/`, `anthropic/`, `images/`, `supabase/` |
+| **`lib/`** | Pure business logic, no React | `fsrs/`, `anthropic/`, `images/`, `supabase/`, `cards/`, `api-auth/`, `api-v1/` |
 
 Rule: Client Components never touch Supabase on the DB side — they go through Server Actions (which verify auth via a server-side `createClient()`).
+
+## Public API
+
+The `/api/v1/*` surface lets external clients (today: the Claude Code skill at `skills/anamnese/`) mutate the deck on behalf of a user. Flow:
+
+```
+External client (Claude Code, curl, …)
+  │
+  │  POST /api/v1/cards
+  │  Authorization: Bearer ana_sk_<32 Crockford base32>
+  ▼
+lib/api-v1/handler.ts#withApiKey(fn)
+  │  (1) verifyApiKey(req)   ← lib/api-auth/verify.ts
+  │        SHA-256 the raw key → SELECT user_id FROM api_keys WHERE key_hash=? AND revoked_at IS NULL
+  │        (service-role client; RLS bypassed)
+  │  (2) fire-and-forget UPDATE api_keys SET last_used_at = now()
+  │  (3) build ctx = { userId, keyId, supabase: createServiceClient() }
+  ▼
+route handler (e.g. app/api/v1/cards/route.ts)
+  │  Zod-parse body → normalizeCreatePayload (auto-gen distractors if missing)
+  ▼
+lib/cards/repository.ts  ← single CRUD source shared with Server Actions
+  │  .eq('user_id', ctx.userId)  ← MANDATORY (service-role bypasses RLS)
+  ▼
+cards / reviews tables
+```
+
+See [[api]] for the endpoint reference and [[conventions#api-routes--service-role]] for the filtering invariant.
 
 ## Create a card flow
 

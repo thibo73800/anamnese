@@ -34,7 +34,51 @@ The template in use is not Radix: the generated `Button` **has no `asChild` prop
 
 Client Components **never** touch Supabase on the DB side. Every mutation flows through a Server Action (`app/actions/*`) which creates its own server-side `createClient()` (session cookies → RLS enforced via `auth.uid()`).
 
-The `service_role` key is used **only** in admin scripts (`scripts/admin-*.mjs`) — never in any action called from the UI.
+The `service_role` key is used in:
+1. Admin scripts (`scripts/admin-*.mjs`) — user management, bypass email flow.
+2. Public API route handlers (`app/api/v1/**/route.ts`) — see next section.
+
+Never in any Server Action called from the UI.
+
+## API routes — service role + mandatory filtering
+
+`/api/v1/*` route handlers are Bearer-auth'd (not session-auth'd), so they cannot rely on `auth.uid()`. They use `createServiceClient()` from `lib/supabase/service.ts`, which **bypasses RLS**. The isolation barrier becomes application-level:
+
+**Every query issued from the service-role client MUST filter `.eq('user_id', userId)`** where `userId` is resolved by `verifyApiKey()` (`lib/api-auth/verify.ts`). This is enforced at the `lib/cards/repository.ts` layer — which is the single allowed place where card rows are read or mutated. Server Actions delegate there too.
+
+Violating this invariant = inter-tenant leak. Integration tests assert the presence of the filter on every repo function.
+
+**Proxy exemption**: `lib/supabase/proxy.ts` would otherwise redirect any cookieless request to `/login`. The proxy explicitly skips paths starting with `/api/v1/` so that Bearer-auth'd requests reach the route handler (which then answers 401 itself if the key is missing or invalid). Do not broaden the proxy's auth guard without re-exempting `/api/v1/`.
+
+## API keys — hashing & one-time reveal
+
+Personal API keys (`ana_sk_...`) are hashed with **SHA-256** (`lib/api-auth/keygen.ts#sha256Hex`), not bcrypt/argon2. Rationale: the raw key is 32 Crockford-base32 chars = 160 bits of uniform entropy, so slow-KDFs are unnecessary — this is the Stripe / GitHub PAT pattern.
+
+The raw key is returned **exactly once** from `createApiKey` (`app/actions/api-keys.ts`) and shown in a one-time dialog in `/settings/api-keys`. After that, only `prefix` and `last4` remain visible. Regenerating = revoke + create.
+
+## Cards CRUD — single source of truth
+
+`lib/cards/repository.ts` is the **only** module that mutates or reads the `cards` table (outside of one-off queries in `app/actions/cards.ts` for FSRS review). Both Server Actions (session-auth) and `/api/v1/*` route handlers (Bearer-auth) delegate there.
+
+Why: shared Zod validation, shared FSRS initialization (`initCard()`), and — critically — the mandatory `.eq('user_id', userId)` filter is in one place, not duplicated per caller.
+
+## PWA — minimal service worker, no offline cache
+
+The app is online-only but ships a **minimal service worker** at `public/sw.js`. Its sole purpose is to satisfy Chrome Android's PWA installability criteria (which require a registered SW with a `fetch` handler). The handler is an **empty passthrough** — no caching, no request interception, no offline support.
+
+- Registration: `components/pwa/sw-register.tsx` (only in production — avoids stale SW state during `npm run dev`), mounted once from `app/layout.tsx`.
+- Proxy exemption: `/sw.js` is listed as a public asset in `lib/supabase/proxy.ts` so the request reaches the file instead of being redirected to `/login`.
+- Install UX: `components/pwa/install-button.tsx` captures `beforeinstallprompt` on Chrome/Edge and exposes a manual trigger; on iOS Safari it falls back to a short "Share → Add to Home Screen" tutorial dialog. Rendered inside the mobile nav sheet (`components/app-nav.tsx`).
+
+Do not add offline caching to this SW. If offline becomes a requirement, it needs a dedicated design conversation — the current invariant assumes every request hits the network.
+
+## Mobile navigation — hamburger + Sheet
+
+The authenticated header (`components/app-nav.tsx`) renders:
+- Desktop (`md`+): horizontal link list, identical to the legacy layout.
+- Mobile (`<md`): a hamburger `<Button size="icon">` that opens a side Sheet with vertical links + Install button + Déconnexion.
+
+The Sheet primitive lives at `components/ui/sheet.tsx` and is built on `@base-ui/react/dialog` (not Radix — see [`#shadcn-ui--base-uireact`](#shadcnui--base-uireact)). Animations use `tw-animate-css` classes (`slide-in-from-left`, etc.) via base-ui's `data-open` / `data-closed` attributes.
 
 ## Images — plain `<img>` tag
 

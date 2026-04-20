@@ -3,6 +3,7 @@
 Migrations:
 - [`0001_init.sql`](../supabase/migrations/0001_init.sql) — initial schema
 - [`0002_card_explanation.sql`](../supabase/migrations/0002_card_explanation.sql) — adds the `explanation` column
+- [`0003_api_keys.sql`](../supabase/migrations/0003_api_keys.sql) — personal API keys table
 
 ## Tables
 
@@ -25,6 +26,28 @@ Migrations:
 | `created_at`, `updated_at` | timestamptz | `set_updated_at` trigger on UPDATE |
 
 **Legacy cards**: some may carry a `qcm_choices.correct` field (old shape, full definition) with likewise long `distractors`. The code ignores that field — the correct answer remains `card.term`. The "Delete" button on `/cards` lets the user remove them manually if needed.
+
+### `public.api_keys`
+
+Personal API keys issued from `/settings/api-keys`, used as Bearer tokens by external clients (e.g. the Claude Code skill in `skills/anamnese/`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK default `gen_random_uuid()` | |
+| `user_id` | uuid FK `auth.users(id)` on delete cascade | |
+| `label` | text not null check(length 1..80) | Human-readable name shown in the UI |
+| `key_hash` | text not null **unique** | SHA-256 (hex) of the raw key. Raw value never stored. |
+| `prefix` | text not null | `ana_sk_` + first 4 chars of the random part — shown in the UI |
+| `last4` | text not null | Last 4 chars of the random part — shown in the UI |
+| `created_at` | timestamptz default now() | |
+| `last_used_at` | timestamptz nullable | Updated fire-and-forget on every successful API call |
+| `revoked_at` | timestamptz nullable | Non-null = key is dead; lookup filters on `revoked_at IS NULL` |
+
+Indexes: `api_keys_user_idx (user_id, created_at desc)`, `api_keys_hash_idx` (unique on `key_hash`).
+
+**RLS**: owner-only (`auth.uid() = user_id`). The `/api/v1/*` route handlers bypass this policy on purpose by using the service-role client — see [[conventions#api-routes--service-role]].
+
+**Hashing — SHA-256 (not bcrypt/argon2)**: the raw key is `ana_sk_` + 32 Crockford base32 chars = 160 bits of uniform entropy. Slow-KDFs defend low-entropy human passwords; they're unnecessary (and costly) for high-entropy random tokens. This matches the Stripe / GitHub PAT pattern. Implementation: `lib/api-auth/keygen.ts`.
 
 ### `public.reviews`
 

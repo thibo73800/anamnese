@@ -59,13 +59,16 @@ Form in the app header → POST to the `logout` Server Action → `signOut()` in
 
 ```ts
 // lib/supabase/proxy.ts
-if (!user && !isAuthRoute && !isPublicAsset) redirect('/login')
+if (!user && !isAuthRoute && !isPublicAsset && !isBearerApiRoute) redirect('/login')
 if (user && isAuthRoute) redirect('/')
 ```
 
 - **isAuthRoute**: `/login`, `/signup`, `/auth/*` (callback included — no need to be logged in to claim it)
-- **isPublicAsset**: `/_next/*`, `/api/auth/*`, `/favicon.ico`, `/manifest.webmanifest`
+- **isPublicAsset**: `/_next/*`, `/api/auth/*`, `/favicon.ico`, `/manifest.webmanifest`, `/sw.js`
+- **isBearerApiRoute**: `/api/v1/*` — the public API has its own auth (Bearer token, see [[api]]), so the proxy lets these through without a session cookie. The route handler returns 401 itself if the key is missing or invalid. See [[conventions#api-routes--service-role]].
 - Icons (`/icon`, `/apple-icon`) go through the `proxy.ts` matcher which already excludes image extensions
+
+The service worker (`/sw.js`) is an explicit exemption: the browser fetches it without session cookies during registration, so the proxy would otherwise redirect the request to `/login` and the SW would never install. See [[conventions#pwa--minimal-service-worker-no-offline-cache]].
 
 ⚠️ **The `getUser()` call inside the proxy is mandatory** — it's what refreshes the expired token and writes the new cookie. Without it, long sessions break silently.
 
@@ -79,6 +82,18 @@ setAll(cookiesToSet) {
 ```
 
 Next.js forbids writing cookies from a **Server Component** (read-only). If we let the exception propagate, any Supabase read from an RSC would crash. The actual session refresh happens in the proxy (which holds a mutable `NextResponse`), so swallowing here breaks nothing.
+
+## Bearer auth for the public API
+
+The session-cookie path above covers the PWA (login, proxy, RLS via `auth.uid()`). External clients (today: the Claude Code skill in `skills/anamnese/`) hit `/api/v1/*` instead, using a personal API key as a `Authorization: Bearer ana_sk_...` header.
+
+Flow (details in [[api]]):
+
+1. Raw key verified by `verifyApiKey()` ([`lib/api-auth/verify.ts`](../lib/api-auth/verify.ts)) — regex format check → SHA-256 → lookup in `api_keys` via the **service-role** client.
+2. Resolved `user_id` is passed to `lib/cards/repository.ts`, which always filters `.eq('user_id', userId)` (mandatory, since RLS is bypassed — see [[conventions#api-routes--service-role]]).
+3. Keys are issued / revoked from `/settings/api-keys` (UI) via `app/actions/api-keys.ts` (regular session auth).
+
+Storage: `api_keys.key_hash` = SHA-256 hex of the raw key (never stored verbatim). The raw value is returned exactly once at creation. Rationale for SHA-256 over bcrypt: the raw key carries 160 bits of uniform entropy, so slow-KDFs are unnecessary — see [[conventions#api-keys--hashing--one-time-reveal]].
 
 ## Admin scripts (signup bypass)
 
@@ -118,5 +133,7 @@ Workarounds:
 
 - [[conventions#supabase-cookies-server-client]] — why the `setAll` swallow is intentional
 - [[conventions#supabase-email-rate-limit-free-tier]] — the three workarounds in detail
+- [[conventions#api-routes--service-role]] — Bearer path's mandatory `.eq('user_id', …)` filtering
+- [[api]] — public API surface + endpoint reference
 - [[operations#admin-scripts]] — exact commands for the admin scripts
-- [[data-model]] — RLS via `auth.uid()`
+- [[data-model]] — RLS via `auth.uid()` (session path), `api_keys` table (Bearer path)

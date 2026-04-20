@@ -10,7 +10,7 @@ Primary consumer: Claude in a future session. Navigation optimized for "quickly 
 
 | Page | Content | Keywords |
 |---|---|---|
-| [[conventions]] | Transverse invariants to scan at the start of a session | Next 16 proxy, Server Actions, UTC dates, shadcn, cookies, FSRS Again-only, qcm_choices, rate limit, Anthropic keys |
+| [[conventions]] | Transverse invariants to scan at the start of a session | Next 16 proxy, Server Actions, UTC dates, shadcn, cookies, FSRS Again-only, qcm_choices, rate limit, Anthropic keys, PWA no-cache SW, mobile nav |
 | [[architecture]] | Next.js App Router breakdown, key components, create / review / batch flows | App Router, RSC, Server Actions, BatchCreator, ReviewSession |
 | [[data-model]] | Postgres schema, indexes, RLS, `updated_at` trigger, migrations | cards, reviews, fsrs_state, qcm_choices, RLS, GIN, ISO-8601 |
 | [[auth-flow]] | Signup/login/logout, PKCE callback, proxy guards, admin scripts, Supabase config | Supabase Auth, PKCE, emailRedirectTo, Redirect URLs, service_role |
@@ -18,10 +18,13 @@ Primary consumer: Claude in a future session. Navigation optimized for "quickly 
 | [[images-pipeline]] | Orchestrator Wikimedia → Unsplash → Google CSE, storage, ImagePreview | findImage, ImageHit, object-contain, attribution, custom URL |
 | [[llm-prompts]] | Sonnet 4.6 client, `theme-explain`, `theme-refine`, batch tool use, costs | Anthropic SDK, Zod structured output, prompt cache, tool use |
 | [[operations]] | Setup, migrations, Vercel deployment, troubleshooting, credential rotation | .env.local, Dashboard SQL Editor, Vercel, email rate limit |
+| [[api]] | Public REST surface — Bearer auth, endpoints, Zod schemas, error codes | `/api/v1/*`, api_keys, SHA-256, Claude Code skill |
 
 ## If you're looking for…
 
 - **Create a user without the email flow** → [[auth-flow#admin-scripts-signup-bypass]]
+- **Add cards from outside the PWA (Claude Code, curl, …)** → [[api]] + `skills/anamnese/SKILL.md`
+- **Generate or revoke an API key** → `/settings/api-keys` in the app; schema in [[data-model#publicapi_keys]]
 - **Apply a SQL migration** → [[operations#db-migration]]
 - **Why the SQL index refuses the `::timestamptz` cast** → [[conventions#dates--serialization]] + [[data-model#why-no-timestamptz-cast-in-the-index]]
 - **Tune the QCM / typing threshold** → [[fsrs#qcm--typing-threshold]]
@@ -31,6 +34,7 @@ Primary consumer: Claude in a future session. Navigation optimized for "quickly 
 - **Enable a longer cache on a prompt** → [[llm-prompts#possible-evolutions]]
 - **Understand what `proxy.ts` does** → [[auth-flow#proxy-guards]] + [[conventions#nextjs-16]]
 - **Fix an Anthropic `credit balance too low`** → [[conventions#anthropic-keys--org-scoped]] + [[operations#common-troubleshooting]]
+- **Install the app on a phone / understand the PWA setup** → [[conventions#pwa--minimal-service-worker-no-offline-cache]] + [[conventions#mobile-navigation--hamburger--sheet]]
 
 ## Update methodology
 

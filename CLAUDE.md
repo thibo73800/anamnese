@@ -1,34 +1,38 @@
 @AGENTS.md
 
-# Anamnèse — contexte pour Claude
+# Anamnèse — context for Claude
 
-PWA de mémorisation / culture générale / flashcards. Flow: recherche d'un thème → explication LLM (markdown, Q&A follow-up possible) + image → flashcard (terme + définition + explication persistée) → révision FSRS. Le **sens de la carte** : on affiche la **définition** et on devine le **terme** (QCM sur 4 termes quand `stability < 7j`, saisie libre ensuite).
+Memorization / general-knowledge / flashcard PWA. Flow: search a theme → LLM explanation (markdown, follow-up Q&A possible) + image → flashcard (term + definition + stored explanation) → FSRS review. **Card orientation**: we show the **definition** and the user guesses the **term** (4-choice MCQ while `stability < 7d`, free text input afterwards).
 
-## Stack verrouillée
+## Documentation language
+
+**All project documentation is written in English, even when our conversations happen in French.** This covers `CLAUDE.md`, `AGENTS.md`, everything under `wiki/`, and any README added to the repo. Talk with the user in French; write files in English. Rationale: code identifiers are English, industry conventions are English, and mixing languages in the doc makes cross-references brittle.
+
+## Locked stack
 
 - **Next.js 16** (App Router, Server Actions, Turbopack) + TypeScript + Tailwind v4 + shadcn/ui
-- **Supabase** : Auth (email/password) + Postgres + RLS
-- **Anthropic Claude** via `@anthropic-ai/sdk`, modèle par défaut `claude-sonnet-4-6`
+- **Supabase**: Auth (email/password) + Postgres + RLS
+- **Anthropic Claude** via `@anthropic-ai/sdk`, default model `claude-sonnet-4-6`
 - **`ts-fsrs`** (FSRS-4.5)
-- **Images** : pipeline hybride Wikimedia Commons → Unsplash → Google CSE
-- Déploiement **Vercel** (online-only, pas de service worker offline)
+- **Images**: hybrid pipeline Wikimedia Commons → Unsplash → Google CSE
+- Deployed on **Vercel** (online-only; minimal service worker registered solely to satisfy PWA installability on Chrome Android, no offline cache)
 
-## Pièges fréquents
+## Common gotchas
 
-Avant de toucher au code, lire **[`wiki/conventions.md`](./wiki/conventions.md)** — 12 invariants transverses (Next 16 `proxy`, `params`/`searchParams` en Promise, Server Actions sans `export type`, index SQL sans cast, Supabase cookies, rate limit email, IPv6-only free tier, shadcn sans `asChild`, clés Anthropic scoped org, migrations empilées, forme de `qcm_choices`, FSRS Encore-only, images sans `next/image`).
+Before touching code, read **[`wiki/conventions.md`](./wiki/conventions.md)** — cross-cutting invariants (Next 16 `proxy`, `params`/`searchParams` as Promises, Server Actions without `export type`, SQL indexes without casts, Supabase cookies, email rate limit, IPv6-only free tier, shadcn without `asChild`, org-scoped Anthropic keys, stacked migrations, shape of `qcm_choices`, FSRS Again-only, images without `next/image`, API routes via service-role with mandatory `.eq('user_id', …)` filtering, API keys hashed SHA-256, `lib/cards/repository.ts` as single CRUD source, proxy exemption for `/api/v1/*`).
 
-Dépannage symptôme → cause → fix : [`wiki/operations.md`](./wiki/operations.md) section "Dépannage fréquent".
+Symptom → cause → fix troubleshooting: [`wiki/operations.md`](./wiki/operations.md) section "Common troubleshooting".
 
-## Commandes utiles
+## Useful commands
 
 ```bash
 npm run dev         # dev server (Turbopack)
-npm run build       # build production
+npm run build       # production build
 npm run typecheck   # tsc --noEmit
 npm run test        # vitest (FSRS)
 npm run lint        # eslint
 
-# Admin scripts (nécessite .env.local chargé)
+# Admin scripts (requires .env.local loaded)
 set -a && source .env.local && set +a
 node scripts/admin-create-user.mjs <email> <password>
 node scripts/admin-reset-user.mjs <email>
@@ -36,45 +40,40 @@ node scripts/admin-reset-user.mjs <email>
 
 ## Wiki
 
-La doc détaillée vit dans [`wiki/`](./wiki/). Elle décrit **l'état actuel uniquement** — pas d'historique, pas de dates de décision, pas de changelog. Git fait l'archéologie.
+Detailed documentation lives in [`wiki/`](./wiki/). It describes **the current state only** — no history, no decision dates, no changelog. Git handles archaeology.
 
-**Le wiki est toujours rédigé en anglais**, même quand nos échanges sont en français. Ça aligne la doc sur les identifiants du code et les conventions de l'industrie.
+**When to read the wiki**: before touching a subsystem, open the matching page to check the invariants you must respect.
 
-**Quand lire le wiki** : avant de toucher à un sous-système, ouvrir la page correspondante pour vérifier les invariants à respecter.
+- Architecture / flows: [`wiki/architecture.md`](./wiki/architecture.md)
+- DB schema / RLS / indexes: [`wiki/data-model.md`](./wiki/data-model.md)
+- Auth / proxy / admin scripts / Bearer auth: [`wiki/auth-flow.md`](./wiki/auth-flow.md)
+- FSRS / review modes: [`wiki/fsrs.md`](./wiki/fsrs.md)
+- Image pipeline: [`wiki/images-pipeline.md`](./wiki/images-pipeline.md)
+- Claude prompts: [`wiki/llm-prompts.md`](./wiki/llm-prompts.md)
+- Public REST API (Bearer-auth'd) + Claude Code skill: [`wiki/api.md`](./wiki/api.md)
+- Setup / migrations / deployment / troubleshooting: [`wiki/operations.md`](./wiki/operations.md)
+- **Cross-cutting conventions and invariants**: [`wiki/conventions.md`](./wiki/conventions.md) ← scan at the start of every session
 
-- Architecture / flux : [`wiki/architecture.md`](./wiki/architecture.md)
-- Schéma DB / RLS / indexes : [`wiki/data-model.md`](./wiki/data-model.md)
-- Auth / proxy / scripts admin : [`wiki/auth-flow.md`](./wiki/auth-flow.md)
-- FSRS / modes de révision : [`wiki/fsrs.md`](./wiki/fsrs.md)
-- Pipeline images : [`wiki/images-pipeline.md`](./wiki/images-pipeline.md)
-- Prompts Claude : [`wiki/llm-prompts.md`](./wiki/llm-prompts.md)
-- Setup / migrations / déploiement / dépannage : [`wiki/operations.md`](./wiki/operations.md)
-- **Conventions et invariants transversaux** : [`wiki/conventions.md`](./wiki/conventions.md) ← à scanner en début de session
+Intra-wiki links use the Obsidian `[[name]]` format (path-independent). Links pointing at source code keep normal relative paths.
 
-Les liens internes au wiki utilisent le format Obsidian `[[nom]]` (indépendants du chemin). Les liens vers le code gardent les chemins relatifs classiques.
+### Update methodology
 
-### Méthodologie de mise à jour
+At the end of every session, one question: **"what do I change in the wiki so that the next Claude easily finds the current state?"**
 
-À la fin de chaque session, une seule question : **« qu'est-ce que je modifie dans le wiki pour que la prochaine Claude retrouve facilement l'état actuel ? »**
+1. Code changed → is the relevant topic page still true? If not, rewrite **in the present tense, in English** (never "previously we did X, now…"). Update file references (`lib/…`, `components/…`, `supabase/migrations/…`).
+2. A cross-cutting rule changed or appeared → [`wiki/conventions.md`](./wiki/conventions.md).
+3. A new troubleshooting symptom → `wiki/operations.md` "Common troubleshooting" section.
+4. A referenced source file has been renamed or moved → grep the wiki for the old path, fix it.
+5. **Never** add "on YYYY-MM-DD we decided…". If it's true, write it in the present tense; if it's dead, delete it; if it's an invariant, put it in `conventions.md` without a date.
+6. **Language**: English-only applies everywhere — the wiki, this file, and every other doc in the repo.
 
-1. Le code a changé → la page topic concernée est-elle encore vraie ? Si non, réécrire **au présent, en anglais** (jamais « previously we did X, now… »). Mettre à jour les références de fichiers (`lib/…`, `components/…`, `supabase/migrations/…`).
-2. Une règle transverse a changé ou est née → [`wiki/conventions.md`](./wiki/conventions.md).
-3. Un nouveau symptôme de dépannage → `wiki/operations.md` section "Common troubleshooting".
-4. Un fichier de code cité a été renommé/déplacé → grep le wiki pour l'ancien chemin, corriger.
-5. **Ne jamais** ajouter « on YYYY-MM-DD we decided… ». Si c'est vrai, c'est au présent ; si c'est mort, ça disparaît ; si c'est un invariant, il va dans `conventions.md` sans date.
-6. **Langue** : même si cette méthodologie est en français dans ce fichier, tout contenu écrit DANS le wiki doit être en anglais.
+**No duplication**: every fact has a single reference page; the others link to it.
 
-**Pas de duplication** : chaque fait a une seule page de référence ; les autres pages linkent.
+**Restructuring**: the `wiki/` root tolerates **up to ~10 files**. Beyond that, group by domain in subfolders (`wiki/domain/`, `wiki/stack/`, etc.) and update the index in `wiki/README.md`. Wikilinks `[[name]]` survive moves as long as names stay unique.
 
-**Restructuration** : la racine de `wiki/` tolère **jusqu'à ~10 fichiers**. Au-delà, regrouper par domaine en sous-dossiers (`wiki/domain/`, `wiki/stack/`, etc.) et mettre à jour l'index dans `wiki/README.md`. Les wikilinks `[[nom]]` survivent au déplacement tant que les noms restent uniques.
+## Persistent memory
 
-## Mémoire persistante
-
-Le fichier `~/.claude/projects/<projet>/memory/` contient :
-- profil utilisateur (francophone, préfère recommandations cadrées)
-- stack figée + raisons
-- préférences de collaboration (questions groupées, Q&A avant code)
-
-## Plan original
-
-[`~/.claude/plans/salut-on-va-travailler-optimized-wilkinson.md`](~/.claude/plans/salut-on-va-travailler-optimized-wilkinson.md) — plan de kickoff avec toutes les décisions architecturales initiales.
+The `~/.claude/projects/<project>/memory/` directory holds:
+- user profile (francophone, prefers recommendations framed with trade-offs)
+- locked stack + reasons
+- collaboration preferences (grouped questions, Q&A before code)

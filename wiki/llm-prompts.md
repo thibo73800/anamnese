@@ -92,6 +92,26 @@ A `refineExplanation` call has comparable cost (max_tokens 2000, input = current
 
 So $5 of credit ≈ 600-1200 generated flashcards. Comfortable for dev.
 
+## Distractors (public API auto-gen)
+
+[`lib/anthropic/distractors.ts`](../lib/anthropic/distractors.ts)
+
+Standalone prompt used by `POST /api/v1/cards` when the payload omits `distractors` (see [[api]]). Given `{ term, definition, theme? }`, returns exactly 3 wrong-but-plausible terms for the QCM review mode.
+
+### Differences from `theme-explain`
+
+- **No structured output helper** — uses `client.messages.create` with a plain system prompt that instructs Claude to return a bare JSON object `{"distractors": [...]}`. Parsed with a tolerant extractor (`indexOf('{')` / `lastIndexOf('}')`) then Zod-validated.
+- **No prompt cache** — the system prompt is short enough that caching wouldn't amortize. Single-shot call per invocation.
+- **Not shared with the UI** — the creation flow in `/create` already gets distractors via `batch.ts` tools. This prompt is only for the Bearer-auth'd API path where the caller (e.g. the Claude Code skill) may not want to ship distractors themselves.
+
+### Cost
+
+`max_tokens: 400`, ~300 input tokens + ~100 output tokens → ~$0.001 per card on Sonnet 4.6. Users calling the API with batches of 50 without distractors pay ~$0.05 per batch.
+
+### Rate considerations
+
+The route handler runs `Promise.all(payloads.map(normalizeCreatePayload))` — batches of N cards without distractors fire N parallel Claude calls. No application rate limiting today (the Bearer-auth'd deployment is single-user). If this grows into multi-tenant, add a per-key token bucket before production traffic.
+
 ## Batch chat (set creation)
 
 [`lib/anthropic/batch.ts`](../lib/anthropic/batch.ts) + [`lib/anthropic/prompts/batch.ts`](../lib/anthropic/prompts/batch.ts). Powers the `/create` route.
@@ -149,6 +169,8 @@ Higher than `theme-explain`: the system prompt is longer (4 tool descriptions) a
 ## See also
 
 - [[architecture#create-a-set-flow-batch-via-chat]] — client `BatchCreator` ↔ Server Action loop
+- [[architecture#public-api]] — where `distractors.ts` plugs in
+- [[api]] — `POST /api/v1/cards` contract (triggers the distractors prompt on missing field)
 - [[conventions#anthropic-keys--org-scoped]] — org/workspace invariant
 - [[fsrs#card-orientation-definition--term]] — motivates distractor shape
 - [[data-model]] — where generated cards land

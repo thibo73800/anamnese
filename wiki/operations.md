@@ -20,6 +20,7 @@ npm run dev
 Migrations in [`supabase/migrations/`](../supabase/migrations/), to apply in order:
 - `0001_init.sql` — initial schema (cards + reviews + RLS + indexes + `updated_at` trigger)
 - `0002_card_explanation.sql` — adds a nullable `explanation text` column on `cards`. **Must be applied before any `createCard`** or the INSERT fails (missing column).
+- `0003_api_keys.sql` — `api_keys` table (personal API keys for the public REST surface). **Must be applied before opening `/settings/api-keys`** or the page errors out.
 
 ### Application
 
@@ -62,6 +63,11 @@ See `SETUP.md` §5. Key points:
 | Dev server doesn't pick up `.env.local` changes | Next.js doesn't hot-reload env vars | Restart `npm run dev` |
 | Vercel build fails on `export type` in a Server Action | `'use server'` files can only export async functions | Move the types to `lib/types.ts` |
 | `GET /icon 404` in prod | `app/icon.tsx` generates a hashed file, the manifest points at `/icon` without hash | Check `next-sitemap` or let Next serve via the route — tested OK in local build |
+| API call returns `{ "error": { "code": "invalid_api_key" } }` despite a fresh key | (a) Missing `SUPABASE_SERVICE_ROLE_KEY` on the server → `verifyApiKey` can't query `api_keys`. (b) Key was revoked in `/settings/api-keys`. (c) Format mismatch (copy-paste mangled the `ana_sk_` prefix). | Check env vars on the deploy (`SUPABASE_SERVICE_ROLE_KEY`), check the `revoked_at` column in the Supabase dashboard, recopy the key. |
+| API `POST /cards` hangs ~1s per card | Auto-generation of missing `distractors` calls Claude once per card | Either ship `distractors` in the payload, or accept the latency — this is by design |
+| No install prompt on Chrome Android / Lighthouse reports "No service worker detected" | `SwRegister` only registers the SW when `NODE_ENV === 'production'` (to avoid stale-SW pain during dev). `npm run dev` never installs `/sw.js`. | Test installability with `npm run build && npm run start` or on a Vercel preview. See [[conventions#pwa--minimal-service-worker-no-offline-cache]]. |
+| `/sw.js` returns a redirect to `/login` | The proxy's `isPublicAsset` list does not include `/sw.js` | Add `pathname === '/sw.js'` to `isPublicAsset` in `lib/supabase/proxy.ts`. See [[auth-flow#proxy-guards]]. |
+| Service worker keeps serving the old code after deploy | The browser caches the SW script for up to 24h by default | Chrome DevTools → Application → Service Workers → Unregister + hard reload. The SW uses `skipWaiting` + `clients.claim`, so subsequent deploys self-update on next page load. |
 
 ## Admin scripts
 
