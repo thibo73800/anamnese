@@ -29,7 +29,7 @@ export function RatingButtons({
           onClick={() => {
             void onRate(b.value)
           }}
-          className="flex flex-col gap-0.5 h-auto py-2"
+          className="flex flex-col gap-0.5 h-auto min-h-[44px] py-3"
         >
           <span className="font-medium">{b.label}</span>
         </Button>

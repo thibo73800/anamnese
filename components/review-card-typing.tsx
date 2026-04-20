@@ -36,6 +36,10 @@ export function ReviewCardTyping({ card, onRate }: Props) {
           disabled={revealed}
           placeholder="Tape le terme…"
           autoFocus
+          autoCapitalize="none"
+          autoCorrect="off"
+          autoComplete="off"
+          spellCheck={false}
         />
       </div>
 

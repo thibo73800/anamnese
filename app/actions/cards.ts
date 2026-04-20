@@ -4,8 +4,16 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
-import { initCard, reviewCard } from '@/lib/fsrs/engine'
+import { reviewCard } from '@/lib/fsrs/engine'
 import { deriveMode } from '@/lib/fsrs/mode'
+import {
+  repoCreateCard,
+  repoDeleteCard,
+  repoListCards,
+  repoListTags,
+  repoUpdateCard,
+  type CreateCardData,
+} from '@/lib/cards/repository'
 import type { AnamneseCard, Rating } from '@/lib/types'
 
 const createSchema = z.object({
@@ -22,40 +30,26 @@ const createSchema = z.object({
 
 export type CreateCardInput = z.infer<typeof createSchema>
 
-export async function createCard(input: CreateCardInput): Promise<{ id: string }> {
-  const parsed = createSchema.parse(input)
+async function currentCtx() {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) throw new Error('Non authentifié')
+  return { supabase, userId: user.id }
+}
 
-  const fsrs_state = initCard()
-  const qcm_choices = { distractors: parsed.distractors }
-
-  const { data, error } = await supabase
-    .from('cards')
-    .insert({
-      user_id: user.id,
-      term: parsed.term,
-      definition: parsed.definition,
-      tags: parsed.tags,
-      theme: parsed.theme,
-      image_url: parsed.image_url,
-      image_source: parsed.image_source,
-      image_attribution: parsed.image_attribution,
-      explanation: parsed.explanation,
-      qcm_choices,
-      fsrs_state,
-    })
-    .select('id')
-    .single()
-
-  if (error || !data) throw new Error(error?.message ?? 'Impossible de créer la carte')
-
+export async function createCard(input: CreateCardInput): Promise<{ id: string }> {
+  const parsed = createSchema.parse(input)
+  const ctx = await currentCtx()
+  const data: CreateCardData = {
+    ...parsed,
+    distractors: [parsed.distractors[0], parsed.distractors[1], parsed.distractors[2]],
+  }
+  const res = await repoCreateCard(ctx, data)
   revalidatePath('/cards')
   revalidatePath('/review')
-  return { id: data.id }
+  return res
 }
 
 const updateSchema = createSchema.omit({ theme: true, distractors: true })
@@ -65,36 +59,15 @@ export async function updateCard(
   input: Omit<CreateCardInput, 'theme' | 'distractors'>,
 ): Promise<void> {
   const parsed = updateSchema.parse(input)
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error('Non authentifié')
-
-  const { error } = await supabase
-    .from('cards')
-    .update({
-      term: parsed.term,
-      definition: parsed.definition,
-      tags: parsed.tags,
-      image_url: parsed.image_url,
-      image_source: parsed.image_source,
-      image_attribution: parsed.image_attribution,
-      explanation: parsed.explanation,
-    })
-    .eq('id', cardId)
-    .eq('user_id', user.id)
-
-  if (error) throw new Error(error.message)
-
+  const ctx = await currentCtx()
+  await repoUpdateCard(ctx, cardId, parsed)
   revalidatePath('/cards')
   revalidatePath('/review')
 }
 
 export async function deleteCard(cardId: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('cards').delete().eq('id', cardId)
-  if (error) throw new Error(error.message)
+  const ctx = await currentCtx()
+  await repoDeleteCard(ctx, cardId)
   revalidatePath('/cards')
   revalidatePath('/review')
 }
@@ -105,31 +78,22 @@ export async function createCardAndGoReview(input: CreateCardInput) {
 }
 
 export async function listCards(opts: { tag?: string } = {}): Promise<AnamneseCard[]> {
-  const supabase = await createClient()
-  const query = supabase
-    .from('cards')
-    .select('*')
-    .order('created_at', { ascending: false })
-  const { data, error } = opts.tag ? await query.contains('tags', [opts.tag]) : await query
-  if (error) throw new Error(error.message)
-  return (data ?? []) as AnamneseCard[]
+  const ctx = await currentCtx()
+  return repoListCards(ctx, { tag: opts.tag, limit: 200 })
 }
 
 export async function listAllTags(): Promise<string[]> {
-  const supabase = await createClient()
-  const { data, error } = await supabase.from('cards').select('tags')
-  if (error) throw new Error(error.message)
-  const set = new Set<string>()
-  for (const row of data ?? []) for (const t of row.tags ?? []) set.add(t)
-  return Array.from(set).sort()
+  const ctx = await currentCtx()
+  return repoListTags(ctx)
 }
 
 export async function getDueCard(): Promise<AnamneseCard | null> {
-  const supabase = await createClient()
+  const ctx = await currentCtx()
   const now = new Date().toISOString()
-  const { data, error } = await supabase
+  const { data, error } = await ctx.supabase
     .from('cards')
     .select('*')
+    .eq('user_id', ctx.userId)
     .lte('fsrs_state->>due', now)
     .order('fsrs_state->>due', { ascending: true })
     .limit(1)
@@ -138,12 +102,13 @@ export async function getDueCard(): Promise<AnamneseCard | null> {
 }
 
 export async function getDueCards(limit: number = 10): Promise<AnamneseCard[]> {
-  const supabase = await createClient()
+  const ctx = await currentCtx()
   const now = new Date().toISOString()
   const safeLimit = Math.max(1, Math.min(50, Math.trunc(limit)))
-  const { data, error } = await supabase
+  const { data, error } = await ctx.supabase
     .from('cards')
     .select('*')
+    .eq('user_id', ctx.userId)
     .lte('fsrs_state->>due', now)
     .order('fsrs_state->>due', { ascending: true })
     .limit(safeLimit)
@@ -155,12 +120,13 @@ export async function getDueCardsExcluding(
   excludeIds: string[],
   limit: number = 10,
 ): Promise<AnamneseCard[]> {
-  const supabase = await createClient()
+  const ctx = await currentCtx()
   const now = new Date().toISOString()
   const safeLimit = Math.max(1, Math.min(50, Math.trunc(limit)))
-  let query = supabase
+  let query = ctx.supabase
     .from('cards')
     .select('*')
+    .eq('user_id', ctx.userId)
     .lte('fsrs_state->>due', now)
     .order('fsrs_state->>due', { ascending: true })
     .limit(safeLimit)
@@ -177,16 +143,13 @@ export async function submitReview(params: {
   rating: Rating
   responseText?: string
 }): Promise<{ nextCard: AnamneseCard }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error('Non authentifié')
+  const ctx = await currentCtx()
 
-  const { data: row, error } = await supabase
+  const { data: row, error } = await ctx.supabase
     .from('cards')
     .select('*')
     .eq('id', params.cardId)
+    .eq('user_id', ctx.userId)
     .single()
   if (error || !row) throw new Error(error?.message ?? 'Carte introuvable')
 
@@ -194,14 +157,15 @@ export async function submitReview(params: {
   const mode = deriveMode(card.fsrs_state)
   const { card: next, previous } = reviewCard(card.fsrs_state, params.rating)
 
-  const updateCard = supabase
+  const updateCardQ = ctx.supabase
     .from('cards')
     .update({ fsrs_state: next })
     .eq('id', card.id)
+    .eq('user_id', ctx.userId)
 
-  const insertReview = supabase.from('reviews').insert({
+  const insertReview = ctx.supabase.from('reviews').insert({
     card_id: card.id,
-    user_id: user.id,
+    user_id: ctx.userId,
     rating: params.rating,
     mode_used: mode,
     response_text: params.responseText ?? null,
@@ -209,7 +173,7 @@ export async function submitReview(params: {
     new_state: next,
   })
 
-  const [updateRes, insertRes] = await Promise.all([updateCard, insertReview])
+  const [updateRes, insertRes] = await Promise.all([updateCardQ, insertReview])
   if (updateRes.error) throw new Error(updateRes.error.message)
   if (insertRes.error) throw new Error(insertRes.error.message)
 
@@ -217,4 +181,3 @@ export async function submitReview(params: {
 
   return { nextCard: { ...card, fsrs_state: next } }
 }
-

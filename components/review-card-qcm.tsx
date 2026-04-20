@@ -45,7 +45,8 @@ export function ReviewCardQcm({ card, onRate }: Props) {
         {choices.map((choice) => {
           const isThisCorrect = choice === card.term
           const isThisSelected = choice === selected
-          let className = 'w-full justify-start whitespace-normal h-auto py-3 text-left'
+          let className =
+            'w-full justify-start whitespace-normal h-auto min-h-[44px] py-3 text-left'
           if (revealed) {
             if (isThisCorrect) className += ' border-green-500 bg-green-500/10'
             else if (isThisSelected) className += ' border-red-500 bg-red-500/10'

@@ -4,9 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages'
 import { createClient } from '@/lib/supabase/server'
-import { initCard } from '@/lib/fsrs/engine'
 import { runBatchTurn } from '@/lib/anthropic/batch'
 import { findImage } from '@/lib/images'
+import { repoCreateCards, type CreateCardData } from '@/lib/cards/repository'
 import type {
   DisplayMessage,
   DraftCard,
@@ -121,37 +121,28 @@ export async function commitSet(
     new Set(parsed.sharedTags.map((t) => t.trim().toLowerCase()).filter(Boolean)),
   )
 
-  const rows = parsed.cards.map((c) => {
+  const rows: CreateCardData[] = parsed.cards.map((c) => {
     const imageSource: ImageSource | null = c.image?.source ?? null
     return {
-      user_id: user.id,
       term: c.term,
       definition: c.definition,
       tags: cleanTags,
       theme: parsed.theme,
+      distractors: [c.distractors[0], c.distractors[1], c.distractors[2]],
       image_url: c.image?.url ?? null,
       image_source: imageSource,
       image_attribution: c.image?.attribution ?? null,
       explanation: null,
-      qcm_choices: { distractors: c.distractors },
-      fsrs_state: initCard(),
     }
   })
 
-  const { data, error } = await supabase
-    .from('cards')
-    .insert(rows)
-    .select('id')
-
-  if (error || !data) {
-    throw new Error(error?.message ?? 'Impossible de créer le set')
-  }
+  const { ids } = await repoCreateCards({ supabase, userId: user.id }, rows)
 
   revalidatePath('/cards')
   revalidatePath('/review')
 
   return {
-    ids: data.map((r) => r.id),
+    ids,
     firstTag: cleanTags[0] ?? null,
   }
 }

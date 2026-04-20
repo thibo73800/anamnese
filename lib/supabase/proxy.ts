@@ -38,9 +38,14 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/auth') ||
     pathname === '/favicon.ico' ||
-    pathname === '/manifest.webmanifest'
+    pathname === '/manifest.webmanifest' ||
+    pathname === '/sw.js'
+  // Les routes /api/v1/* ont leur propre auth Bearer (cf. lib/api-auth/verify.ts).
+  // Elles ne dépendent pas du cookie de session — le proxy les laisse passer,
+  // le handler renverra 401 lui-même si la clé est manquante/invalide.
+  const isBearerApiRoute = pathname.startsWith('/api/v1/')
 
-  if (!user && !isAuthRoute && !isPublicAsset) {
+  if (!user && !isAuthRoute && !isPublicAsset && !isBearerApiRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
