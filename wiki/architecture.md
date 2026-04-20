@@ -1,65 +1,65 @@
 # Architecture
 
-## Découpe Next.js App Router
+## Next.js App Router layout
 
 ```
 app/
-├── (auth)/                    # routes publiques (login, signup)
-│   ├── layout.tsx             # centre la card 390px
+├── (auth)/                    # public routes (login, signup)
+│   ├── layout.tsx             # centers the 390px card
 │   ├── login/page.tsx
 │   └── signup/page.tsx
-├── (app)/                     # routes protégées — layout vérifie la session
-│   ├── layout.tsx             # header nav + guard getUser()
+├── (app)/                     # protected routes — layout verifies the session
+│   ├── layout.tsx             # nav header + getUser() guard
 │   ├── page.tsx               # home + SearchBar
-│   ├── search/page.tsx        # Server Component: appelle explainTheme + findImage
-│   ├── create/page.tsx        # RSC minimal → <BatchCreator> (chat Claude + draft set)
-│   ├── cards/page.tsx         # liste + filtre tags + badge "À réviser" + Modifier/Supprimer
-│   ├── cards/[id]/edit/page.tsx  # édition d'une carte (term/def/tags/image/explanation)
+│   ├── search/page.tsx        # Server Component: calls explainTheme + findImage
+│   ├── create/page.tsx        # minimal RSC → <BatchCreator> (Claude chat + draft set)
+│   ├── cards/page.tsx         # list + tag filter + "Due" badge + Edit/Delete
+│   ├── cards/[id]/edit/page.tsx  # edit a card (term/def/tags/image/explanation)
 │   └── review/page.tsx        # RSC: getDueCards(10) → <ReviewSession> (client-side queue)
-├── auth/callback/route.ts     # Route handler PKCE: échange ?code= contre session
-├── api/image-search/route.ts  # proxy serveur pour findImage (évite d'exposer les clés)
-├── actions/                   # Server Actions (marqués 'use server')
+├── auth/callback/route.ts     # PKCE route handler: exchanges ?code= for a session
+├── api/image-search/route.ts  # server proxy for findImage (avoids exposing keys)
+├── actions/                   # Server Actions (marked 'use server')
 │   ├── auth.ts                # signup, login, logout
 │   ├── cards.ts               # createCard, updateCard, deleteCard, listCards, submitReview, getDueCards, getDueCardsExcluding, …
-│   ├── theme.ts               # refineThemeExplanation (follow-up Q&A sur la recherche)
-│   └── batch-create.ts        # sendBatchMessage, findImageForDraft, commitSet (chat batch /create)
+│   ├── theme.ts               # refineThemeExplanation (search follow-up Q&A)
+│   └── batch-create.ts        # sendBatchMessage, findImageForDraft, commitSet (/create batch chat)
 ├── layout.tsx                 # root layout, manifest, Toaster
-├── manifest.ts                # PWA manifest dynamique
-├── icon.tsx / apple-icon.tsx  # icônes générées via next/og
+├── manifest.ts                # dynamic PWA manifest
+├── icon.tsx / apple-icon.tsx  # icons generated via next/og
 └── globals.css
 ```
 
-## Composants clés
+## Key components
 
-| Composant | Rôle |
+| Component | Role |
 |---|---|
-| `search-result.tsx` (client) | Orchestre l'écran de recherche : `ThemeExplanation` (markdown) + input follow-up Q&A + `CardEditor`. Hoist le state `explanation`. |
-| `theme-explanation.tsx` (server) | Rend l'explication via `<Markdown>`. |
-| `markdown.tsx` (server) | Wrapper `react-markdown` + `remark-gfm` avec styling Tailwind utility. |
-| `card-editor.tsx` (client) | Formulaire create/edit d'une carte : term, définition, tags, image (preview + URL custom + retirer), distracteurs (affichés en détails). `mode: create \| edit` → appelle `createCard` ou `updateCard`. |
-| `image-preview.tsx` (client) | Image `object-contain` hauteur fixe + clic → Dialog plein écran avec attribution. Réutilisé dans CardEditor + review. |
-| `delete-card-button.tsx` (client) | Icône poubelle → Dialog de confirmation → `deleteCard`. |
-| `explanation-info.tsx` (client) | Bouton icône "i" après révélation en review → Dialog markdown avec l'explication complète. |
-| `review-card-qcm.tsx` (client) | **Présentationnel**. QCM **inversé** : affiche définition + image, 4 termes au choix, validation contre `card.term`. Props `{ card, onRate }`. |
-| `review-card-typing.tsx` (client) | **Présentationnel**. Saisie libre : affiche définition, user tape le terme, révèle terme + image. Props `{ card, onRate }`. |
-| `review-session.tsx` (client) | File de cartes préfetchées + pop synchrone au rate + refetch en arrière-plan. Branche QCM/typing via `deriveMode`. `key={current.id}` sur l'enfant → remount entre cartes. Re-insertion en fin de file **uniquement** sur rating=1 (Encore). |
-| `batch-creator.tsx` (client) | Layout 2 colonnes : conversation (chat Claude) + draft set éditable (tags partagés + `DraftCardItem[]` + bouton commit). Historique texte pur, tools éphémères côté serveur. |
-| `draft-card-item.tsx` (client) | Item du set draft : term / définition / distracteurs / bouton "Chercher une image" (opt-in). Pas de persistance tant qu'on n'a pas commit le set. |
+| `search-result.tsx` (client) | Orchestrates the search screen: `ThemeExplanation` (markdown) + follow-up Q&A input + `CardEditor`. Hoists the `explanation` state. |
+| `theme-explanation.tsx` (server) | Renders the explanation via `<Markdown>`. |
+| `markdown.tsx` (server) | `react-markdown` + `remark-gfm` wrapper with Tailwind utility styling. |
+| `card-editor.tsx` (client) | Create/edit form for a card: term, definition, tags, image (preview + custom URL + remove), distractors (shown in details). `mode: create \| edit` → calls `createCard` or `updateCard`. |
+| `image-preview.tsx` (client) | `object-contain` image with fixed height + click → full-screen Dialog with attribution. Reused in CardEditor and review. |
+| `delete-card-button.tsx` (client) | Trash icon → confirmation Dialog → `deleteCard`. |
+| `explanation-info.tsx` (client) | "i" icon button after reveal in review → markdown Dialog with the full explanation. |
+| `review-card-qcm.tsx` (client) | **Presentational.** Shows definition + image, 4 terms to choose from, validates against `card.term`. Props `{ card, onRate }`. |
+| `review-card-typing.tsx` (client) | **Presentational.** Free input: shows definition, user types the term, reveals term + image. Props `{ card, onRate }`. |
+| `review-session.tsx` (client) | Prefetched card queue + synchronous pop on rate + background refetch. Branches QCM/typing via `deriveMode`. `key={current.id}` on the child → remount between cards. Re-insertion at end of queue **only** on rating=1 (Again). |
+| `batch-creator.tsx` (client) | 2-column layout: conversation (Claude chat) + editable draft set (shared tags + `DraftCardItem[]` + commit button). Plain-text history, tools ephemeral on the server side. |
+| `draft-card-item.tsx` (client) | Draft set item: term / definition / distractors / "Find an image" button (opt-in). No persistence until the set is committed. |
 
-## Couches et responsabilités
+## Layers and responsibilities
 
-| Couche | Responsabilité | Exemples |
+| Layer | Responsibility | Examples |
 |---|---|---|
-| **Proxy** (`proxy.ts` + `lib/supabase/proxy.ts`) | Refresh session cookie, auth guard | Redirige `/` → `/login` si pas user |
-| **Server Components** (pages) | Data fetching + RSC | `search/page.tsx` appelle `explainTheme()` |
+| **Proxy** (`proxy.ts` + `lib/supabase/proxy.ts`) | Refresh session cookie, auth guard | Redirects `/` → `/login` if no user |
+| **Server Components** (pages) | Data fetching + RSC | `search/page.tsx` calls `explainTheme()` |
 | **Server Actions** (`app/actions/*`) | Mutations + auth-checked writes | `createCard`, `submitReview` |
-| **Route Handlers** (`/api/*`, `/auth/callback`) | Endpoints HTTP classiques | PKCE callback, proxy image search |
-| **Client Components** | Interactivité | `CardEditor`, `ReviewCardQcm`, `SearchBar` |
-| **`lib/`** | Logique métier pure, pas de React | `fsrs/`, `anthropic/`, `images/`, `supabase/` |
+| **Route Handlers** (`/api/*`, `/auth/callback`) | Plain HTTP endpoints | PKCE callback, image search proxy |
+| **Client Components** | Interactivity | `CardEditor`, `ReviewCardQcm`, `SearchBar` |
+| **`lib/`** | Pure business logic, no React | `fsrs/`, `anthropic/`, `images/`, `supabase/` |
 
-Règle : les Client Components ne touchent jamais directement à Supabase côté DB — ils passent par des Server Actions (qui vérifient l'auth via `createClient()` server-side).
+Rule: Client Components never touch Supabase on the DB side — they go through Server Actions (which verify auth via a server-side `createClient()`).
 
-## Flux "créer une carte"
+## Create a card flow
 
 ```
 SearchBar (client) ──push──▶ /search?q=<theme>
@@ -68,7 +68,7 @@ SearchBar (client) ──push──▶ /search?q=<theme>
                                     │
                        ┌────────────┴────────────┐
                        ▼                         ▼
-              explainTheme(theme)         findImage(query)  [si needsImage]
+              explainTheme(theme)         findImage(query)  [if needsImage]
               (lib/anthropic)              (lib/images)
                        │                         │
                        └───────────┬─────────────┘
@@ -76,16 +76,16 @@ SearchBar (client) ──push──▶ /search?q=<theme>
                        <SearchResult> (client)
                        ├── ThemeExplanation (markdown)
                        ├── FollowUp input ──▶ refineThemeExplanation
-                       │     (user pose Q)     (LLM regénère explication enrichie)
+                       │     (user asks Q)     (LLM regenerates enriched explanation)
                        │                             │
                        │                      replaces explanation state
                        │
-                       └── CardEditor (pré-rempli + image preview + URL custom)
+                       └── CardEditor (prefilled + image preview + custom URL)
                                    │
                         user submit ↓
                                    ▼
                         createCard Server Action
-                                   │   (payload inclut `explanation` courante)
+                                   │   (payload includes current `explanation`)
                         ┌──────────┴──────────┐
                         ▼                     ▼
                    supabase INSERT        initCard() FSRS
@@ -95,134 +95,139 @@ SearchBar (client) ──push──▶ /search?q=<theme>
                               redirect /cards
 ```
 
-## Flux "réviser"
+## Review flow
 
-Depuis 2026-04-20 : la page de révision est client-side avec queue préfetchée.
+The review page is client-side with a prefetched queue.
 
 ```
 /review (Server Component, minimal)
    │
    └─▶ getDueCards(10)  ─── order by fsrs_state->>'due' asc, limit 10
-                              filtre user_id via RLS
+                              filter user_id via RLS
          │
          ▼
     <ReviewSession initialCards={...}>  (client)
          │
-         ├── queue: AnamneseCard[]   (initialisé à partir des initialCards)
-         ├── seenRef: Set<id>        (empêche doublons au refetch)
-         └── exhausted: boolean      (true si serveur renvoie < PREFETCH_BATCH)
+         ├── queue: AnamneseCard[]   (seeded from initialCards)
+         ├── seenRef: Set<id>        (prevents duplicates on refetch)
+         └── exhausted: boolean      (true if server returns < PREFETCH_BATCH)
 
   current = queue[0]
          │
-         └─▶ deriveMode(current.fsrs_state)  (stability >= 7j → typing, sinon qcm)
+         └─▶ deriveMode(current.fsrs_state)  (stability >= 7d → typing, else qcm)
               │
               ├─── mode=qcm → <ReviewCardQcm key={current.id} card={current} onRate={onRate}>
               └─── mode=typing → <ReviewCardTyping key={current.id} card={current} onRate={onRate}>
 
   onRate(rating, responseText?) :
          │
-         ├── setQueue((q) => q.slice(1))          // pop synchrone → carte suivante instantanée
+         ├── setQueue((q) => q.slice(1))          // synchronous pop → next card is instant
          ├── setReviewedCount++
          │
          ├── if queue.length - 1 <= 3 and !exhausted:
-         │       void refetchMore()               // refetch 10 de plus en arrière-plan
+         │       void refetchMore()               // refetch 10 more in the background
          │                                         // via getDueCardsExcluding(seenIds, 10)
          │
-         └── submitReview(...)  (fire-and-forget, .then/.catch, pas d'await)
+         └── submitReview(...)  (fire-and-forget, .then/.catch, no await)
                    │
                    ├── reviewCard(state, rating) via ts-fsrs
                    ├── UPDATE cards.fsrs_state
-                   ├── INSERT INTO reviews (historique)
-                   ├── revalidatePath('/cards')   (pas '/review' : éviterait re-render coûteux)
+                   ├── INSERT INTO reviews (history)
+                   ├── revalidatePath('/cards')   (not '/review': would cause an expensive re-render)
                    └── return { nextCard }
                          │
-                         └── if rating === 1 (Encore):
-                                setQueue((q) => [...q, nextCard])  // re-insertion en fin de file
+                         └── if rating === 1 (Again):
+                                setQueue((q) => [...q, nextCard])  // re-insert at end of queue
                              else:
-                                 la carte sort de la session, réapparaît quand due passe
+                                 card leaves the session, reappears once due passes
 
-après reveal : si card.explanation non-null,
-  icône "i" → Dialog markdown avec l'explication complète
+after reveal: if card.explanation is non-null,
+  "i" icon → markdown Dialog with the full explanation
 ```
 
-**Invariants** :
-- DB = source de vérité. La queue locale est une commodité de pré-chargement : les cartes préfetchées mais non rated ne sont pas consommées (simple SELECT), elles réapparaîtront au prochain `/review`.
-- Re-insertion **uniquement** si rating === 1 (Encore). Tout autre rating = sortie immédiate. Le compteur "N en file" reste fidèle à ce qui est dû côté DB.
-- `key={current.id}` sur les composants cartes → remount complet → state local (`selected`, `answer`, `revealed`) repart à zéro à chaque carte.
+**Invariants**:
+- DB = source of truth. The local queue is a prefetch convenience: prefetched-but-unrated cards are not consumed (plain SELECT), they reappear in the next `/review`.
+- Re-insertion **only** when rating === 1 (Again). Any other rating = immediate exit. The "N in queue" counter stays faithful to what is actually due on the DB side.
+- `key={current.id}` on the card components → full remount → local state (`selected`, `answer`, `revealed`) resets for each card.
 
-## Flux "créer un set" (batch via chat)
+## Create a set flow (batch via chat)
 
-Depuis 2026-04-20. Route [`/create`](../app/(app)/create/page.tsx).
+Route [`/create`](../app/(app)/create/page.tsx).
 
 ```
-<BatchCreator>  (client — useState pour tout)
+<BatchCreator>  (client — useState for everything)
    │
-   ├── history: DisplayMessage[]    // {role, text} — pur texte, pas de tool_use ici
+   ├── history: DisplayMessage[]    // {role, text} — plain text, no tool_use here
    ├── draftCards: DraftCard[]      // {localId, term, definition, distractors[3], image}
    ├── sharedTags: string[]
    └── userInput: string
 
-  user tape + envoie
+  user types + sends
          │
          └─▶ sendBatchMessage({ history, userText, draftCards, sharedTags })  (Server Action)
                    │
                    └─▶ runBatchTurn(...)  (lib/anthropic/batch.ts)
                           │
-                          ┌────────── boucle max 5 itérations ──────────┐
-                          │                                              │
-                          │   user message = [formatState(draft,tags),   │
-                          │                   userText]                  │
-                          │                                              │
-                          │   client.messages.create({                   │
-                          │     tools: BATCH_TOOLS,                      │
-                          │     messages: apiMessages,                   │
-                          │   })                                         │
-                          │          │                                   │
-                          │          ▼                                   │
-                          │   response.content contient:                 │
-                          │     - text blocks (message assistant)        │
-                          │     - tool_use blocks                        │
-                          │          │                                   │
-                          │          ▼                                   │
-                          │   applyTool(name, input, state) → nouveau    │
-                          │     state + tool_result text                 │
-                          │          │                                   │
-                          │          ▼                                   │
-                          │   si stop_reason === 'tool_use':             │
-                          │     push tool_results au msg suivant → loop  │
-                          │   sinon: break                               │
-                          └──────────────────────────────────────────────┘
+                          ┌────────── loop, max 5 iterations ──────────┐
+                          │                                             │
+                          │   user message = [formatState(draft,tags),  │
+                          │                   userText]                 │
+                          │                                             │
+                          │   client.messages.create({                  │
+                          │     tools: BATCH_TOOLS,                     │
+                          │     messages: apiMessages,                  │
+                          │   })                                        │
+                          │          │                                  │
+                          │          ▼                                  │
+                          │   response.content contains:                │
+                          │     - text blocks (assistant message)       │
+                          │     - tool_use blocks                       │
+                          │          │                                  │
+                          │          ▼                                  │
+                          │   applyTool(name, input, state) → new       │
+                          │     state + tool_result text                │
+                          │          │                                  │
+                          │          ▼                                  │
+                          │   if stop_reason === 'tool_use':            │
+                          │     push tool_results to next msg → loop    │
+                          │   else: break                               │
+                          └─────────────────────────────────────────────┘
                    │
                    └─▶ { assistantText, draftCards, sharedTags }
          │
          ▼
-   état client mis à jour : history += [user, assistant], draft + tags remplacés
+   client state updated: history += [user, assistant], draft + tags replaced
 
-  user peut aussi :
-    - éditer term/définition/distracteurs directement dans DraftCardItem
-    - supprimer une carte du draft
-    - ajouter/retirer un tag manuellement
-    - cliquer "Chercher une image" sur une carte (appelle findImageForDraft)
-    - ajouter une carte vide ("+ Ajouter une carte manuellement")
+  user may also:
+    - edit term/definition/distractors directly in DraftCardItem
+    - delete a card from the draft
+    - add/remove a tag manually
+    - click "Find an image" on a card (calls findImageForDraft)
+    - add an empty card ("+ Add card manually")
 
-  bouton final "Ajouter N cartes au deck"
+  final "Add N cards to the deck" button
          │
          └─▶ commitSet({ theme, sharedTags, cards })
                    │
-                   ├── INSERT batch dans cards (N rows, 1 seul query)
-                   │     chacun avec initCard() FSRS + qcm_choices.distractors
+                   ├── batch INSERT into cards (N rows, single query)
+                   │     each with initCard() FSRS + qcm_choices.distractors
                    ├── revalidatePath('/cards'), revalidatePath('/review')
                    └── return { ids, firstTag }
          │
          └─▶ redirect /cards?tag=<firstTag>
 ```
 
-**Outils Claude** (JSON Schema dans [`lib/anthropic/batch.ts`](../lib/anthropic/batch.ts)) :
-- `create_cards({ cards: [{ term, definition, distractors[3] }] })` — ajoute N cartes, assigne des `localId` UUID
-- `edit_card({ localId, patch: { term?, definition?, distractors? } })` — modifie une carte existante
-- `delete_card({ localId })` — supprime une carte du set
-- `propose_tags({ tags: string[] })` — remplace la liste des tags partagés
+**Claude tools** (JSON Schema in [`lib/anthropic/batch.ts`](../lib/anthropic/batch.ts)):
+- `create_cards({ cards: [{ term, definition, distractors[3] }] })` — adds N cards, assigns UUID `localId`s
+- `edit_card({ localId, patch: { term?, definition?, distractors? } })` — edits an existing card
+- `delete_card({ localId })` — removes a card from the set
+- `propose_tags({ tags: string[] })` — replaces the shared tag list
 
-Le `localId` est un UUID client généré via `crypto.randomUUID()`. Le LLM le reçoit via `formatState` et l'utilise pour cibler `edit_card`/`delete_card`.
+`localId` is a client-generated UUID from `crypto.randomUUID()`. The LLM receives it via `formatState` and uses it to target `edit_card`/`delete_card`.
 
-Voir aussi : [fsrs.md](./fsrs.md), [data-model.md](./data-model.md), [llm-prompts.md](./llm-prompts.md).
+## See also
+
+- [[conventions]] — transverse invariants (FSRS Again-only, UTC dates, Server Actions)
+- [[fsrs]] — algorithm, QCM/typing threshold, re-insertion
+- [[data-model]] — `cards` / `reviews` schema, indexes
+- [[llm-prompts]] — theme-explain, theme-refine, batch (tool use)

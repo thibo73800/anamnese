@@ -2,38 +2,38 @@
 
 ## Client
 
-[`lib/anthropic/client.ts`](../lib/anthropic/client.ts) — init lazy + export `ANAMNESE_MODEL = 'claude-sonnet-4-6'`.
+[`lib/anthropic/client.ts`](../lib/anthropic/client.ts) — lazy init + export `ANAMNESE_MODEL = 'claude-sonnet-4-6'`.
 
-Pourquoi Sonnet 4.6 plutôt qu'Opus 4.7 :
-- La tâche est structurée + relativement simple (résumé + extraction de termes + distracteurs)
-- Sonnet 4.6 coûte 5× moins que Opus 4.7 ($3/$15 vs $5/$25 par M tokens)
-- Qualité observée sur les tests : largement suffisante, français impeccable
+Why Sonnet 4.6 rather than Opus 4.7:
+- Task is structured and fairly simple (summary + term extraction + distractors)
+- Sonnet 4.6 costs 5× less than Opus 4.7 ($3/$15 vs $5/$25 per M tokens)
+- Quality observed in tests: more than sufficient, flawless French
 
-Si on veut upgrade sur des thèmes pointus ou obscurs : changer la constante. Aucune autre modif.
+To upgrade on niche or obscure themes: change the constant. No other modification needed.
 
-## Prompt theme-explain
+## theme-explain prompt
 
 [`lib/anthropic/prompts/theme-explain.ts`](../lib/anthropic/prompts/theme-explain.ts)
 
 ### System prompt
 
-Cadre strict :
-- Français obligatoire
-- 5 sorties structurées : explication (150-300 mots, **markdown simple** — gras/italique), carte (terme ≤40 car + définition 20-50 mots), 3 distracteurs, 1-4 tags, flag `needsImage` + `imageQuery`
-- Distracteurs : **3 termes** sémantiquement proches du terme correct (synonymes partiels, concepts adjacents, faux-amis, disciplines voisines), ≤ 40 car. **Pas des définitions** (depuis 2026-04-19, inversion du sens QCM). Cf. [decisions.md](./decisions.md).
-- Contraintes dures : pas d'émoji, définition autosuffisante, si thème vague → angle emblématique
+Strict frame:
+- French output required
+- 5 structured fields: explanation (150-300 words, **simple markdown** — bold/italic), card (term ≤40 chars + definition 20-50 words), 3 distractors, 1-4 tags, `needsImage` flag + `imageQuery`
+- Distractors: **3 terms** semantically close to the correct term (partial synonyms, adjacent concepts, false friends, neighboring disciplines), ≤ 40 chars. **Not definitions** — the QCM tests term recall from the definition (see [[fsrs#card-orientation-definition--term]]).
+- Hard constraints: no emoji, self-sufficient definition, if the theme is vague → pick an emblematic angle
 
-**Prompt cache** activé via `cache_control: { type: 'ephemeral' }` sur le system block → le prompt stable est cached par Anthropic, baisse la latence et le coût des appels suivants (~90% sur la portion cached).
+**Prompt cache** enabled via `cache_control: { type: 'ephemeral' }` on the system block → the stable prompt is cached by Anthropic, cutting latency and cost on subsequent calls (~90% savings on the cached portion).
 
 ### User prompt
 
-Juste `Thème: <trim(theme)>` — tout le reste est dans le system. Cette séparation est ce qui permet au cache de fonctionner (le user message varie, le system ne varie pas).
+Just `Thème: <trim(theme)>` — everything else lives in the system. This separation is what makes caching effective (user message varies, system doesn't).
 
 ## Structured output
 
-[`lib/anthropic/theme.ts`](../lib/anthropic/theme.ts) utilise `client.messages.parse()` + `zodOutputFormat(ThemeExplanationSchema)` — pattern recommandé du SDK TS. Le schéma Zod est auto-converti en JSON Schema et la réponse est validée côté SDK.
+[`lib/anthropic/theme.ts`](../lib/anthropic/theme.ts) uses `client.messages.parse()` + `zodOutputFormat(ThemeExplanationSchema)` — the TS SDK's recommended pattern. The Zod schema is auto-converted to JSON Schema and the response is validated SDK-side.
 
-Schéma :
+Schema:
 
 ```ts
 {
@@ -49,99 +49,106 @@ Schéma :
 }
 ```
 
-Si `response.parsed_output === null` → on throw. Jamais vu en pratique sur ce prompt mais c'est le signe d'une réponse mal formée (Claude ne peut plus donner d'output qui violerait le schéma avec structured outputs, mais `refusal` reste possible).
+If `response.parsed_output === null` → throw. Never seen in practice on this prompt, but it signals a malformed response (Claude can't emit output that violates the schema with structured outputs, but `refusal` remains possible).
 
-## Prompt theme-refine (follow-up Q&A)
+## theme-refine prompt (follow-up Q&A)
 
 [`lib/anthropic/prompts/theme-refine.ts`](../lib/anthropic/prompts/theme-refine.ts)
 
-Appelé depuis `SearchResult` quand l'utilisateur pose une question de clarification sous l'explication initiale.
+Called from `SearchResult` when the user asks a clarifying question below the initial explanation.
 
-### Contrat
+### Contract
 
-Input :
-- `theme` (le thème d'origine)
-- `currentExplanation` (version courante, potentiellement déjà enrichie par un tour précédent)
-- `question` (ce que l'utilisateur demande)
+Input:
+- `theme` (original theme)
+- `currentExplanation` (current version, possibly already enriched by a previous turn)
+- `question` (what the user is asking)
 
-Output structuré :
+Structured output:
 ```ts
-{ explanation: string }  // version enrichie, 150-400 mots, markdown simple
+{ explanation: string }  // enriched version, 150-400 words, simple markdown
 ```
 
-### Comportement attendu
+### Expected behavior
 
-Le LLM doit **enrichir** l'explication existante, pas la remplacer par une FAQ séparée :
-- Intégrer la clarification au bon endroit du texte.
-- Conserver l'essentiel de l'explication d'origine.
-- Pas de "Q:… R:…", pas de section annexe.
-- Si la question est hors-sujet, répondre dans la mesure du lien au thème, sinon reformuler légèrement.
+The LLM should **enrich** the existing explanation, not replace it with a separate FAQ:
+- Weave the clarification in at the right spot in the text.
+- Preserve the essence of the original explanation.
+- No "Q:… A:…", no sidebar section.
+- If the question is off-topic, answer to the extent it relates to the theme; otherwise rephrase slightly.
 
-### Persistance
+### Persistence
 
-La version finale (après 0, 1, N tours de raffinement) est sauvegardée dans `cards.explanation` au moment de `createCard`. Accessible ensuite depuis la révision via le bouton "i" (`ExplanationInfo`). Les tours intermédiaires sont **éphémères** — pas d'historique Q&A.
+The final version (after 0, 1, N refinement turns) is saved into `cards.explanation` at `createCard` time. Accessible afterwards during review via the "i" button (`ExplanationInfo`). Intermediate turns are **ephemeral** — no Q&A history is kept.
 
-## Coût observé
+## Observed cost
 
-- Input cached (prompt system stable) : ~0.3-0.5k tokens
-- Input non-cached (user message court) : ~30 tokens
-- Output (explication + JSON) : ~800-1200 tokens
-- **Coût par thème ≈ $0.004-$0.008** sur Sonnet 4.6
+- Cached input (stable system prompt): ~0.3-0.5k tokens
+- Non-cached input (short user message): ~30 tokens
+- Output (explanation + JSON): ~800-1200 tokens
+- **Cost per theme ≈ $0.004-$0.008** on Sonnet 4.6
 
-Un appel `refineExplanation` a un coût comparable (max_tokens 2000, input = explication courante + question). Pas de prompt cache TTL partagé avec `explainTheme` — system prompts distincts.
+A `refineExplanation` call has comparable cost (max_tokens 2000, input = current explanation + question). No shared prompt-cache TTL with `explainTheme` — distinct system prompts.
 
-Donc $5 de crédit ≈ 600-1200 flashcards générables. Large pour du dev.
+So $5 of credit ≈ 600-1200 generated flashcards. Comfortable for dev.
 
-## Batch chat (création de sets) — depuis 2026-04-20
+## Batch chat (set creation)
 
-[`lib/anthropic/batch.ts`](../lib/anthropic/batch.ts) + [`lib/anthropic/prompts/batch.ts`](../lib/anthropic/prompts/batch.ts). Alimente la route `/create`.
+[`lib/anthropic/batch.ts`](../lib/anthropic/batch.ts) + [`lib/anthropic/prompts/batch.ts`](../lib/anthropic/prompts/batch.ts). Powers the `/create` route.
 
-### Différences avec `theme-explain`
+### Differences from `theme-explain`
 
-- **Pas de `client.messages.parse`** — on utilise `client.messages.create` pour récupérer les `tool_use` bruts.
-- **4 outils** custom au lieu d'un schéma de sortie unique :
+- **No `client.messages.parse`** — we use `client.messages.create` to get raw `tool_use` blocks.
+- **4 custom tools** instead of a single output schema:
   - `create_cards({ cards: [{ term, definition, distractors[3] }] })`
   - `edit_card({ localId, patch })`
   - `delete_card({ localId })`
   - `propose_tags({ tags: string[] })`
-- **Boucle agentique** côté serveur (`runBatchTurn`, max 5 itérations). Chaque itération :
-  1. Appel Claude avec `messages` + `tools`
-  2. Si `stop_reason === 'tool_use'` : chaque tool est validé (Zod), appliqué au state local (`draftCards`, `sharedTags`), un `tool_result` est composé avec un résumé textuel
-  3. On injecte les `tool_result` dans un message `user` et on reloop
-  4. Sinon on sort et on renvoie le texte libre final
-- **État courant injecté à chaque tour** via `formatState(draft, tags)` en tête du message utilisateur. Le modèle voit toujours la vérité courante, y compris après édition manuelle du user dans l'UI entre deux tours.
-- **LocalId** = UUID client. Le prompt système précise que `edit_card`/`delete_card` doivent cibler par `localId` fourni dans l'état courant. Plus robuste qu'un index numérique qui bouge quand on supprime.
-- **Historique client** : le composant stocke uniquement `DisplayMessage[]` (role + texte). Les `tool_use` / `tool_result` vivent seulement le temps d'un tour dans `runBatchTurn` — ils ne s'accumulent pas côté client et n'alourdissent pas la requête.
+- **Agentic loop** server-side (`runBatchTurn`, max 5 iterations). Each iteration:
+  1. Call Claude with `messages` + `tools`
+  2. If `stop_reason === 'tool_use'`: each tool is validated (Zod), applied to local state (`draftCards`, `sharedTags`), and a `tool_result` is composed with a textual summary
+  3. The `tool_result`s are injected into a `user` message and we loop
+  4. Otherwise exit and return the final free text
+- **Current state injected at every turn** via `formatState(draft, tags)` at the top of each user message. The model always sees the live truth, even after manual edits by the user in the UI between turns.
+- **LocalId** = client UUID. The system prompt instructs `edit_card`/`delete_card` to target via the `localId` provided in the current state. More robust than a numeric index that shifts on deletion.
+- **Client history**: the component only stores `DisplayMessage[]` (role + text). `tool_use` / `tool_result` blocks live ephemerally inside `runBatchTurn` for the duration of a turn — they don't accumulate on the client or bloat the request.
 
 ### System prompt
 
-Définit 2 phases :
-1. **Premier tour** (set vide) : 6-10 cartes initiales via `create_cards` + tags via `propose_tags` + message texte court récapitulant.
-2. **Tours suivants** : éditer/supprimer/ajouter plutôt que reconstruire. Peut appeler plusieurs outils dans un même tour.
+Defines 2 phases:
+1. **First turn** (empty set): 6-10 initial cards via `create_cards` + tags via `propose_tags` + a short text message recapping.
+2. **Subsequent turns**: edit/delete/add rather than rebuild. May call multiple tools in a single turn.
 
-Règles qualité identiques à `theme-explain` pour la forme des cartes (français, termes courts, définition 20-60 mots, distracteurs = termes proches et pas phrases).
+Quality rules for card shape match `theme-explain` (French, short terms, 20-60 word definition, distractors as close terms not sentences).
 
-`cache_control: ephemeral` sur le system prompt (cache 5 min par défaut).
+`cache_control: ephemeral` on the system prompt (default 5-min cache TTL).
 
-### Contrat server action
+### Server action contract
 
 ```ts
 sendBatchMessage({ history, userText, draftCards, sharedTags })
-  → { history, draftCards, sharedTags }       // état mis à jour
+  → { history, draftCards, sharedTags }       // updated state
 
 findImageForDraft({ query })
-  → ImageHit | null                            // trigger opt-in du pipeline image
+  → ImageHit | null                            // opt-in image pipeline trigger
 
 commitSet({ theme, sharedTags, cards })
-  → { ids, firstTag }                          // INSERT batch + revalidate
+  → { ids, firstTag }                          // batch INSERT + revalidate
 ```
 
-### Coût observé
+### Observed cost
 
-Plus élevé que `theme-explain` : le prompt système est plus long (description des 4 tools) et on fait **plusieurs tours par message utilisateur** (chaque tool_use déclenche une relance). En pratique : 1-3 itérations par message, ~2-5k tokens input cumulés, ~1-2k tokens output. **Coût par message ≈ $0.02-$0.05** sur Sonnet 4.6. Un set entier (2-4 messages user) → $0.05-$0.20.
+Higher than `theme-explain`: the system prompt is longer (4 tool descriptions) and we do **several turns per user message** (each tool_use triggers a relance). In practice: 1-3 iterations per message, ~2-5k cumulative input tokens, ~1-2k output tokens. **Cost per message ≈ $0.02-$0.05** on Sonnet 4.6. A full set (2-4 user messages) → $0.05-$0.20.
 
-## Évolutions possibles
+## Possible evolutions
 
-- **Prompt caching avec TTL 1h** (`cache_control: { type: 'ephemeral', ttl: '1h' }`) si le système devient plus gros et qu'on a beaucoup de trafic par jour. Actuellement TTL 5min par défaut = OK.
-- **Adaptive thinking** (`thinking: { type: 'adaptive' }`) non activé : la tâche ne le justifie pas (extraction structurée simple). À activer si on veut des explications plus profondes/nuancées.
-- **Retry sur `refusal`** : pas de gestion actuellement. Si ça arrive sur un thème sensible, l'UI affiche juste l'erreur Anthropic. À surveiller.
+- **Prompt caching with 1h TTL** (`cache_control: { type: 'ephemeral', ttl: '1h' }`) if the system grows and daily traffic warrants it. Current 5-min default is fine.
+- **Adaptive thinking** (`thinking: { type: 'adaptive' }`) not enabled: the task doesn't warrant it (simple structured extraction). Enable it if we want deeper/more nuanced explanations.
+- **Retry on `refusal`**: no handling currently. If it triggers on a sensitive theme, the UI just shows the Anthropic error. Monitor.
+
+## See also
+
+- [[architecture#create-a-set-flow-batch-via-chat]] — client `BatchCreator` ↔ Server Action loop
+- [[conventions#anthropic-keys--org-scoped]] — org/workspace invariant
+- [[fsrs#card-orientation-definition--term]] — motivates distractor shape
+- [[data-model]] — where generated cards land

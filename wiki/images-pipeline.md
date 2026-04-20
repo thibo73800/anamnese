@@ -1,32 +1,32 @@
 # Images pipeline
 
-## Orchestrateur
+## Orchestrator
 
-[`lib/images/index.ts`](../lib/images/index.ts) — `findImage(query)` :
+[`lib/images/index.ts`](../lib/images/index.ts) — `findImage(query)`:
 
 ```
 Wikimedia Commons  →  Unsplash  →  Google CSE  →  null
-   (gratuit, pas         (clé         (clés +
-    de clé requise)      Access)      quota 100/j)
+   (free, no key       (Access        (keys +
+    required)           Key)           quota 100/day)
 ```
 
-Chaque source est tentée séquentiellement ; la première qui retourne un `ImageHit` non-null gagne. Erreurs loggées en `console.warn`, jamais remontées à l'UI (tomber silencieusement sur la suivante est le comportement voulu).
+Each source is tried sequentially; the first one returning a non-null `ImageHit` wins. Errors are logged as `console.warn`, never surfaced to the UI (silent fall-through to the next source is the intended behavior).
 
-## Quand est-ce appelé
+## When is it called
 
-Exclusivement depuis `search/page.tsx` (Server Component) **et** uniquement si `explainTheme` a répondu `needsImage: true`. Le LLM décide si une image aide ou non — pas besoin d'en forcer une pour chaque carte (ex: concept abstrait genre "empathie", l'image rarement pertinente).
+Exclusively from `search/page.tsx` (Server Component) **and** only when `explainTheme` returned `needsImage: true`. The LLM decides whether an image helps — no need to force one for every card (e.g. an abstract concept like "empathy" rarely benefits from an image).
 
-Fallback UI : si `findImage` renvoie `null`, la section image n'est juste pas rendue, pas de broken image icon.
+UI fallback: if `findImage` returns `null`, the image section simply isn't rendered, no broken image icon.
 
 ## Sources
 
 ### Wikimedia Commons ([`lib/images/wikimedia.ts`](../lib/images/wikimedia.ts))
 
-- API MediaWiki publique `commons.wikimedia.org/w/api.php`
-- Query : `action=query&generator=search&gsrsearch=<query> filetype:bitmap|drawing&gsrnamespace=6`
-- Récupère 3 résultats + `imageinfo` (url, dimensions, extmetadata)
-- Filtre : `width >= 320` (ignore les trop petits → souvent des logos/icônes)
-- Attribution : `Artist · License` extraits de `extmetadata`
+- Public MediaWiki API `commons.wikimedia.org/w/api.php`
+- Query: `action=query&generator=search&gsrsearch=<query> filetype:bitmap|drawing&gsrnamespace=6`
+- Pulls 3 results + `imageinfo` (url, dimensions, extmetadata)
+- Filter: `width >= 320` (skip too-small hits — often logos/icons)
+- Attribution: `Artist · License` extracted from `extmetadata`
 - Revalidate 24h
 
 ### Unsplash ([`lib/images/unsplash.ts`](../lib/images/unsplash.ts))
@@ -34,53 +34,53 @@ Fallback UI : si `findImage` renvoie `null`, la section image n'est juste pas re
 - Endpoint `api.unsplash.com/search/photos`
 - Header `Authorization: Client-ID <UNSPLASH_ACCESS_KEY>`
 - `per_page=1, content_filter=high, orientation=landscape`
-- Attribution obligatoire (Terms Unsplash) : `<name> / Unsplash`
-- Skip silencieusement si pas de clé
+- Attribution required (Unsplash ToS): `<name> / Unsplash`
+- Silently skipped if no key
 
 ### Google Custom Search ([`lib/images/google.ts`](../lib/images/google.ts))
 
 - Endpoint `www.googleapis.com/customsearch/v1`
-- Paramètres `searchType=image&safe=active&imgSize=medium`
-- Requiert `GOOGLE_CSE_ID` + `GOOGLE_CSE_KEY`
-- **Quota gratuit 100 req/j**, puis $5/1000 → fallback de dernier recours
-- Skip silencieusement si une des deux clés manque
+- Params `searchType=image&safe=active&imgSize=medium`
+- Requires `GOOGLE_CSE_ID` + `GOOGLE_CSE_KEY`
+- **Free quota 100 req/day**, then $5/1000 → last-resort fallback
+- Silently skipped if either key is missing
 
-## Route API interne
+## Internal API route
 
-[`app/api/image-search/route.ts`](../app/api/image-search/route.ts) — `GET /api/image-search?q=<query>`, protégé par auth. Utile pour une future UX "Changer d'image" depuis le CardEditor ou une page de détail — à ce jour pas encore branché côté UI.
+[`app/api/image-search/route.ts`](../app/api/image-search/route.ts) — `GET /api/image-search?q=<query>`, auth-protected. Useful for a future "Change image" UX from the CardEditor or a detail page — not yet wired into the UI.
 
-## Stockage
+## Storage
 
-Une fois choisie, on stocke dans `cards` :
-- `image_url` (chaîne)
-- `image_source` (`wikimedia` | `unsplash` | `google`) — **nullable**, `null` quand l'utilisateur a collé une URL personnalisée depuis le CardEditor
-- `image_attribution` (crédit à afficher sous l'image) — `null` pour URL custom
+Once picked, we store into `cards`:
+- `image_url` (string)
+- `image_source` (`wikimedia` | `unsplash` | `google`) — **nullable**, `null` when the user pasted a custom URL in the CardEditor
+- `image_attribution` (credit to show below the image) — `null` for custom URLs
 
-L'image est servie en `<img src>` direct (pas via `next/image`) pour éviter le casse-tête des remote patterns quand la source est Google CSE (domaines arbitraires). Tradeoff : pas d'optimisation auto de Vercel, mais les images Wikimedia et Unsplash sont déjà servies depuis des CDN optimisés.
+Images render via `<img src>` directly (not `next/image`) to avoid the `remotePatterns` headache when the source is Google CSE (arbitrary domains). Trade-off: no automatic Vercel optimization, but Wikimedia and Unsplash images are already served from optimized CDNs.
 
-## URL personnalisée
+## Custom URL
 
-Dans le `CardEditor` (création + édition) l'utilisateur peut :
-- Retirer l'image auto (bouton "Retirer l'image") → `image_url` / `image_source` / `image_attribution` repassent à `null`.
-- Coller une URL (champ input) → remplace l'image auto. `image_source` + `image_attribution` passent à `null` (pas de source canonique pour une URL arbitraire).
-- Restaurer l'image auto (bouton "Restaurer l'image auto") → remet les valeurs initiales.
+In the `CardEditor` (create + edit) the user can:
+- Remove the auto image ("Remove image" button) → `image_url` / `image_source` / `image_attribution` reset to `null`.
+- Paste a URL (input field) → replaces the auto image. `image_source` + `image_attribution` become `null` (no canonical source for an arbitrary URL).
+- Restore the auto image ("Restore auto image" button) → resets to the initial values.
 
-Validation légère : `z.string().url()` côté server action. Pas de check MIME (l'user assume le rendu).
+Light validation: `z.string().url()` on the server action side. No MIME check (user takes the rendering risk).
 
-## Affichage : composant `ImagePreview`
+## Display: the `ImagePreview` component
 
-[`components/image-preview.tsx`](../components/image-preview.tsx) — utilisé partout (CardEditor, ReviewCardQcm, ReviewCardTyping) depuis 2026-04-19 :
+[`components/image-preview.tsx`](../components/image-preview.tsx) — used throughout (CardEditor, ReviewCardQcm, ReviewCardTyping):
 
-- Hauteur fixe configurable (`heightClass`, défaut `h-56`) — layout stable.
-- `object-contain` **pas** `object-cover` → plus de crop, les proportions originales sont respectées.
-- Clic sur l'image → Dialog plein écran (max 95vw × 85vh), image en grand + attribution dessous.
-- Légère animation `hover:scale-[1.02]` pour signaler que c'est cliquable.
+- Configurable fixed height (`heightClass`, default `h-56`) — stable layout.
+- `object-contain` **not** `object-cover` → no crop, original proportions respected.
+- Click the image → full-screen Dialog (max 95vw × 85vh), large image + attribution below.
+- Subtle `hover:scale-[1.02]` animation to signal it's clickable.
 
-`ThemeExplanation` n'affiche plus l'image depuis 2026-04-19 — elle a été déplacée dans le `CardEditor` pour éviter le doublon visuel sur la page de recherche.
+`ThemeExplanation` no longer renders the image — it lives in the `CardEditor` instead, to avoid visual duplication on the search page.
 
-## Légende
+## Caption
 
-Affichée par `ImagePreview` sous l'image quand `attribution` est fourni :
+Rendered by `ImagePreview` below the image whenever `attribution` is provided:
 
 ```tsx
 <figcaption className="bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
@@ -88,4 +88,10 @@ Affichée par `ImagePreview` sous l'image quand `attribution` est fourni :
 </figcaption>
 ```
 
-Rendre ce crédit visible est requis par les CGU d'Unsplash et une bonne pratique pour Wikimedia. Pour les URL custom, pas d'attribution affichée.
+Showing this credit is required by Unsplash's ToS and good practice for Wikimedia. For custom URLs, no attribution is shown.
+
+## See also
+
+- [[conventions#images--plain-img-tag]] — why not `next/image`, `object-contain`
+- [[data-model]] — `image_url` / `image_source` / `image_attribution` columns
+- [[architecture#create-a-card-flow]] — where `findImage` is called

@@ -1,39 +1,39 @@
 # Auth flow
 
-## Composants
+## Components
 
-- [`lib/supabase/client.ts`](../lib/supabase/client.ts) — `createBrowserClient` pour Client Components
-- [`lib/supabase/server.ts`](../lib/supabase/server.ts) — `createServerClient` + adaptateur cookies (`next/headers`)
-- [`lib/supabase/proxy.ts`](../lib/supabase/proxy.ts) — `updateSession` appelée par `proxy.ts` à la racine
-- [`proxy.ts`](../proxy.ts) (racine) — proxy Next.js 16 (ex-middleware), refresh cookie + redirect guards
+- [`lib/supabase/client.ts`](../lib/supabase/client.ts) — `createBrowserClient` for Client Components
+- [`lib/supabase/server.ts`](../lib/supabase/server.ts) — `createServerClient` + cookie adapter (`next/headers`)
+- [`lib/supabase/proxy.ts`](../lib/supabase/proxy.ts) — `updateSession` called by root-level `proxy.ts`
+- [`proxy.ts`](../proxy.ts) (root) — Next.js 16 proxy (formerly middleware): cookie refresh + redirect guards
 - [`app/actions/auth.ts`](../app/actions/auth.ts) — Server Actions `signup`, `login`, `logout`
-- [`app/auth/callback/route.ts`](../app/auth/callback/route.ts) — échange PKCE après email de confirmation
+- [`app/auth/callback/route.ts`](../app/auth/callback/route.ts) — PKCE exchange after the confirmation email
 
 ## Signup
 
 ```
-user submit form
+user submits form
   ↓
 signup Server Action
   ↓
 supabase.auth.signUp({ email, password, options: { emailRedirectTo } })
   ↓
-┌─── "Confirm email" OFF dans Supabase ? ───┐
-│                                              │
-│   data.session !== null                      │
-│   → revalidatePath + redirect('/')           │
-│   → proxy laisse passer                      │
-│   → home app                                 │
-│                                              │
-└── "Confirm email" ON ? ───────────────────┘
+┌─── "Confirm email" OFF in Supabase? ───┐
+│                                         │
+│   data.session !== null                 │
+│   → revalidatePath + redirect('/')      │
+│   → proxy lets through                  │
+│   → app home                            │
+│                                         │
+└── "Confirm email" ON? ────────────────┘
         │
         data.session === null
-        → retourne { error: "email envoyé, clique le lien" }
-        → user voit le message
-        → user clique le lien dans l'email
-        → Supabase redirige vers /auth/callback?code=...
+        → returns { error: "email sent, click the link" }
+        → user sees the message
+        → user clicks the link in the email
+        → Supabase redirects to /auth/callback?code=...
         → route handler: exchangeCodeForSession
-        → cookie session posé
+        → session cookie set
         → redirect /
 ```
 
@@ -44,16 +44,16 @@ login Server Action
   ↓
 supabase.auth.signInWithPassword
   ↓
-cookie session posé par l'adaptateur (Server Action peut écrire cookies)
+session cookie set by the adapter (Server Actions may write cookies)
   ↓
 revalidatePath + redirect('/')
   ↓
-proxy voit user → laisse passer → home
+proxy sees user → lets through → home
 ```
 
 ## Logout
 
-Form dans le header app → POST vers Server Action `logout` → `signOut()` invalide le cookie → redirect `/login`.
+Form in the app header → POST to the `logout` Server Action → `signOut()` invalidates the cookie → redirect `/login`.
 
 ## Proxy guards
 
@@ -63,13 +63,13 @@ if (!user && !isAuthRoute && !isPublicAsset) redirect('/login')
 if (user && isAuthRoute) redirect('/')
 ```
 
-- **isAuthRoute** : `/login`, `/signup`, `/auth/*` (callback inclus — pas besoin d'être connecté pour le réclamer)
-- **isPublicAsset** : `/_next/*`, `/api/auth/*`, `/favicon.ico`, `/manifest.webmanifest`
-- Les icônes (`/icon`, `/apple-icon`) passent par le matcher de `proxy.ts` qui exclut déjà les extensions d'image
+- **isAuthRoute**: `/login`, `/signup`, `/auth/*` (callback included — no need to be logged in to claim it)
+- **isPublicAsset**: `/_next/*`, `/api/auth/*`, `/favicon.ico`, `/manifest.webmanifest`
+- Icons (`/icon`, `/apple-icon`) go through the `proxy.ts` matcher which already excludes image extensions
 
-⚠️ **L'appel `getUser()` dans le proxy est obligatoire** : c'est ce qui refresh le token expiré et écrit le nouveau cookie. Si on l'enlève, les sessions longues cassent silencieusement.
+⚠️ **The `getUser()` call inside the proxy is mandatory** — it's what refreshes the expired token and writes the new cookie. Without it, long sessions break silently.
 
-## Server Client `setAll` — try/catch intentionnel
+## Server client `setAll` — intentional try/catch
 
 ```ts
 setAll(cookiesToSet) {
@@ -78,38 +78,45 @@ setAll(cookiesToSet) {
 }
 ```
 
-Next.js interdit l'écriture de cookies depuis un **Server Component** (lecture seule). Si on laissait l'exception remonter, toute lecture Supabase depuis un RSC crasherait. Le refresh réel de session est fait par le proxy (qui a un `NextResponse` mutable), donc ce swallow ne casse rien.
+Next.js forbids writing cookies from a **Server Component** (read-only). If we let the exception propagate, any Supabase read from an RSC would crash. The actual session refresh happens in the proxy (which holds a mutable `NextResponse`), so swallowing here breaks nothing.
 
-## Scripts admin (bypass signup)
+## Admin scripts (signup bypass)
 
-Utilité : rate limit email atteint, ou besoin de créer un compte test sans lire d'email.
+Use cases: email rate limit hit, or need a test account without reading an email.
 
 ```bash
 set -a && source .env.local && set +a
 
-# Créer un user pré-confirmé
-node scripts/admin-create-user.mjs 'test@example.com' 'motDePasse'
+# Create a pre-confirmed user
+node scripts/admin-create-user.mjs 'test@example.com' 'password'
 
-# Supprimer un user (avant re-signup, debug, cleanup)
+# Delete a user (before re-signup, debug, cleanup)
 node scripts/admin-reset-user.mjs 'test@example.com'
 ```
 
-Les deux utilisent `SUPABASE_SERVICE_ROLE_KEY` pour bypasser RLS et appellent l'API admin `auth.admin.*`.
+Both use `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS and call the admin API `auth.admin.*`.
 
-## Configuration Supabase requise
+## Required Supabase configuration
 
-Dans le dashboard → **Authentication → URL Configuration** :
+In the dashboard → **Authentication → URL Configuration**:
 
-- **Site URL** : `http://localhost:3000` en dev, URL Vercel en prod
-- **Redirect URLs** (liste blanche) : doit contenir `http://localhost:3000/auth/callback` (et l'équivalent prod)
+- **Site URL**: `http://localhost:3000` in dev, the Vercel URL in prod
+- **Redirect URLs** (allowlist): must include `http://localhost:3000/auth/callback` (and the prod equivalent)
 
-Sans cette autorisation, Supabase refuse de rediriger vers `/auth/callback` même si l'URL est passée en `emailRedirectTo`.
+Without this whitelist, Supabase refuses to redirect to `/auth/callback` even when the URL is passed as `emailRedirectTo`.
 
-## Rate limit email Supabase
+## Supabase email rate limit
 
-Free tier : **4 emails par heure** combinant signup + password reset + magic link. Se réinitialise 1h après le dernier envoi.
+Free tier: **4 emails per hour** combined across signup + password reset + magic link. Resets 1h after the last send.
 
-Workarounds :
-1. Bypass via `scripts/admin-create-user.mjs` pour les tests
-2. Configurer un SMTP custom (Resend, Mailgun, Brevo) dans Supabase → Auth → SMTP Settings — limites beaucoup plus hautes
-3. Désactiver "Confirm email" pour le dev (Auth → Providers → Email → décocher Confirm email)
+Workarounds:
+1. Bypass via `scripts/admin-create-user.mjs` for testing
+2. Configure a custom SMTP (Resend, Mailgun, Brevo) in Supabase → Auth → SMTP Settings — much higher limits
+3. Disable "Confirm email" for dev (Auth → Providers → Email → uncheck Confirm email)
+
+## See also
+
+- [[conventions#supabase-cookies-server-client]] — why the `setAll` swallow is intentional
+- [[conventions#supabase-email-rate-limit-free-tier]] — the three workarounds in detail
+- [[operations#admin-scripts]] — exact commands for the admin scripts
+- [[data-model]] — RLS via `auth.uid()`

@@ -1,91 +1,97 @@
-# FSRS & modes de révision
+# FSRS & review modes
 
-## Lib
+## Library
 
-[`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) (FSRS-4.5), wrapper minimal dans [`lib/fsrs/engine.ts`](../lib/fsrs/engine.ts).
+[`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) (FSRS-4.5), minimal wrapper in [`lib/fsrs/engine.ts`](../lib/fsrs/engine.ts).
 
-## API interne
+## Internal API
 
 ```ts
-initCard(now?: Date): Card                    // nouvelle carte, state = New
-reviewCard(state, rating, now?)               // applique le rating → { card, previous }
+initCard(now?: Date): Card                    // new card, state = New
+reviewCard(state, rating, now?)               // applies the rating → { card, previous }
   // rating ∈ {1,2,3,4} = Again | Hard | Good | Easy
-normalizeCard(raw): Card                      // remet les Date en Date après round-trip JSONB
+normalizeCard(raw): Card                      // restores Date objects after JSONB round-trip
 ```
 
-Paramètres FSRS :
-- `enable_fuzz: true` — ajoute un peu de bruit aléatoire aux intervalles pour éviter que plein de cartes tombent le même jour
-- Tout le reste = defaults (`request_retention: 0.9`, `maximum_interval: 36500`, decay FSRS-5)
+FSRS parameters:
+- `enable_fuzz: true` — adds a bit of random noise to intervals so many cards don't fall on the same day
+- Everything else = defaults (`request_retention: 0.9`, `maximum_interval: 36500`, FSRS-5 decay)
 
 ## JSON round-trip
 
-`Card` a des `Date`, `ts-fsrs` les sérialise en string ISO dans `JSON.stringify`. Au `SELECT` Supabase on récupère des strings. `normalizeCard` convertit `due` / `last_review` en `Date` et `state` text → enum int avant de rappeler `scheduler.next()`.
+`Card` uses `Date` objects, `ts-fsrs` serializes them to ISO strings via `JSON.stringify`. On Supabase `SELECT` we get strings back. `normalizeCard` converts `due` / `last_review` back to `Date` and `state` from text → int enum before calling `scheduler.next()` again.
 
-Si tu édites manuellement `fsrs_state` (debug), garde ce format — toute string non ISO-8601 fera planter `new Date(…)`.
+If you edit `fsrs_state` manually (debug), keep the same format — any non-ISO-8601 string crashes `new Date(…)`.
 
-## Seuil QCM → saisie
+## QCM → typing threshold
 
 [`lib/fsrs/mode.ts`](../lib/fsrs/mode.ts)
 
 ```ts
 export const TYPING_MODE_STABILITY_THRESHOLD_DAYS = 7
 
-deriveMode(state) → 'typing' si stability >= 7, sinon 'qcm'
+deriveMode(state) → 'typing' if stability >= 7, else 'qcm'
 ```
 
-**Pourquoi `stability`** et pas `reps` :
-- `reps` ignore la qualité des réponses (3 Good d'affilée ≠ 3 Again)
-- `stability` prédit combien de jours la carte restera retenue → mesure directe de "à quel point c'est appris"
-- Si on met que des "Again", la stability reste < 7 et la carte reste en QCM → comportement désiré
+**Why `stability`** and not `reps`:
+- `reps` ignores answer quality (3 Good in a row ≠ 3 Again)
+- `stability` predicts how many days the card will stay retained → a direct measure of "how well it's learned"
+- If only "Again" is rated, stability stays < 7 and the card stays in QCM → desired behavior
 
-Ajuster le seuil : changer la constante, pas d'autre modif nécessaire. Les cartes existantes basculeront automatiquement la prochaine fois que `deriveMode` est appelé.
+Tweak the threshold: change the constant, nothing else needs touching. Existing cards will flip automatically the next time `deriveMode` is called.
 
 ## Rating UI
 
-4 boutons FSRS ([`components/rating-buttons.tsx`](../components/rating-buttons.tsx)) :
+4 FSRS buttons ([`components/rating-buttons.tsx`](../components/rating-buttons.tsx)):
 
-| Bouton | Rating | Sémantique | Effet sur la session courante |
+| Button | Rating | Meaning | Effect on the current session |
 |---|---|---|---|
-| Encore | 1 (Again) | J'ai pas retrouvé, à remontrer vite | **Re-poussée en fin de file** (la seule à l'être) |
-| Difficile | 2 (Hard) | J'ai retrouvé mais à la limite | Sort de la session, réapparaîtra quand `due` sera passé |
-| Bien | 3 (Good) | OK, rythme normal | Sort de la session |
-| Facile | 4 (Easy) | Trop évident, espace plus | Sort de la session |
+| Again | 1 | I couldn't recall, show me again soon | **Pushed to end of queue** (the only rating that does this) |
+| Hard | 2 | Got it but barely | Leaves the session, reappears once `due` has passed |
+| Good | 3 | OK, normal cadence | Leaves the session |
+| Easy | 4 | Too obvious, space it more | Leaves the session |
 
-En mode QCM, le reveal se fait par **clic sur une option** — pas besoin d'un bouton "Montrer la réponse" séparé.
-En mode saisie, clic sur "Révéler la réponse" après avoir tapé, puis rating.
+In QCM mode, the reveal happens on **clicking an option** — no separate "Show answer" button needed.
+In typing mode, click "Reveal" after typing, then rate.
 
-## Session de révision (depuis 2026-04-20)
+## Review session
 
-La page `/review` est client-side avec queue préfetchée de 10 cartes, gérée par [`components/review-session.tsx`](../components/review-session.tsx).
+The `/review` page is client-side with a prefetched queue of 10 cards, managed by [`components/review-session.tsx`](../components/review-session.tsx).
 
-- **Préchargement** : RSC fait `getDueCards(10)`, passe la liste à `<ReviewSession>`. Refetch en arrière-plan via `getDueCardsExcluding(seenIds, 10)` dès que la queue descend à ≤ 3.
-- **Pop synchrone** au rate : la carte suivante s'affiche au prochain paint (pas de round-trip serveur attendu).
-- **Persistance** : chaque rate est une écriture atomique `update cards.fsrs_state + insert reviews`. Les cartes préfetchées non rated ne sont pas consommées côté DB.
-- **Re-insertion Encore-only** : seul rating 1 re-pousse la carte en fin de file. Tout autre rating = sortie immédiate, réapparition naturelle au prochain `getDueCards`. Ce choix évite le mismatch UI/DB qu'avait l'ancienne règle "fenêtre de 15 min sur nextDue" (cartes visibles localement alors que non-dues en DB).
-- **Fire-and-forget** sur `submitReview` : `.then/.catch`, pas d'`await`. Permet à l'UI de ne pas attendre le commit DB pour passer à la carte suivante. Erreurs via toast.
-- `key={current.id}` sur `<ReviewCardQcm>` / `<ReviewCardTyping>` → remount complet entre cartes, state local reset.
+- **Prefetch**: the RSC calls `getDueCards(10)` and passes the list to `<ReviewSession>`. Background refetch via `getDueCardsExcluding(seenIds, 10)` once the queue drops to ≤ 3.
+- **Synchronous pop** on rate: the next card appears on the next paint (no server round-trip awaited).
+- **Persistence**: each rate is an atomic `update cards.fsrs_state + insert reviews`. Prefetched unrated cards are not consumed on the DB side.
+- **Again-only re-insertion**: only rating 1 re-pushes the card to the end of the queue. Any other rating = immediate exit, natural reappearance at the next `getDueCards`. This choice aligns UI and DB: the "N in queue" counter stays faithful to what is actually due in persistence.
+- **Fire-and-forget** on `submitReview`: `.then/.catch`, no `await`. Lets the UI advance without waiting for the DB commit. Errors surface via toast.
+- `key={current.id}` on `<ReviewCardQcm>` / `<ReviewCardTyping>` → full remount between cards, local state reset.
 
-Voir le flux détaillé dans [architecture.md](./architecture.md#flux-réviser).
+Detailed flow in [[architecture#review-flow]].
 
-## Sens de la carte : définition → terme
+## Card orientation: definition → term
 
-Depuis 2026-04-19 (cf. [decisions.md](./decisions.md)) :
-- **QCM** : affiche la **définition** + image, 4 **termes** au choix, valide contre `card.term`.
-- **Typing** : affiche la **définition**, user tape le **terme**, révèle terme + image.
+- **QCM**: shows the **definition** + image, 4 **terms** to choose from, validates against `card.term`.
+- **Typing**: shows the **definition**, user types the **term**, reveals term + image.
 
-On teste donc le rappel du vocabulaire à partir du concept, pas l'inverse. Les distracteurs QCM sont des termes proches, pas des définitions alternatives. Le champ `qcm_choices.correct` a été supprimé du type (la bonne réponse = `card.term`).
+We test vocabulary recall from the concept — pedagogically stronger than recognition. QCM distractors are semantically close terms (partial synonyms, false friends), not alternative definitions. The correct answer = `card.term`; there is no `correct` field in `qcm_choices` (see [[conventions#qcm_choices--shape]]).
 
-Après révélation, si `card.explanation` est non-null, un bouton icône "i" ouvre un Dialog markdown avec l'explication détaillée (contexte approfondi du concept).
+After reveal, if `card.explanation` is non-null, an "i" icon button opens a markdown Dialog with the detailed explanation.
 
 ## Tests
 
-[`lib/fsrs/engine.test.ts`](../lib/fsrs/engine.test.ts) — 7 tests Vitest :
-- Init (état New, reps=0)
-- Chaque rating 1..4 applicable sans crash, `due` dans le futur
-- Again après 2 Good → incrémente `lapses`
-- Easy > Good sur `stability`
-- Round-trip JSON préserve le comportement
-- `deriveMode` retourne `qcm` sur carte neuve
-- `deriveMode` bascule à exactement `stability >= 7`
+[`lib/fsrs/engine.test.ts`](../lib/fsrs/engine.test.ts) — 7 Vitest tests:
+- Init (state New, reps=0)
+- Each rating 1..4 applies without crash, `due` in the future
+- Again after 2 Goods → increments `lapses`
+- Easy > Good on `stability`
+- JSON round-trip preserves behavior
+- `deriveMode` returns `qcm` on a fresh card
+- `deriveMode` flips exactly at `stability >= 7`
 
-`npm test` pour les relancer.
+`npm test` to re-run.
+
+## See also
+
+- [[architecture#review-flow]] — full client-side session flow
+- [[conventions#fsrs--re-insertion--card-orientation]] — Again-only invariant and card orientation
+- [[data-model]] — `fsrs_state` and `qcm_choices` structure
+- [[llm-prompts]] — prompt that generates the distractors (close terms)
