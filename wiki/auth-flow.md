@@ -64,9 +64,8 @@ if (user && isAuthRoute) redirect('/')
 ```
 
 - **isAuthRoute**: `/login`, `/signup`, `/auth/*` (callback included — no need to be logged in to claim it)
-- **isPublicAsset**: `/_next/*`, `/api/auth/*`, `/favicon.ico`, `/manifest.webmanifest`, `/sw.js`
+- **isPublicAsset**: `/_next/*`, `/api/auth/*`, `/favicon.ico`, `/manifest.webmanifest`, `/sw.js`, and the PWA icon routes (`/icon`, `/apple-icon`, `/icon-192`, `/icon-maskable`) — logged-out visitors must be able to fetch them so Chrome can evaluate the manifest on `/login`
 - **isBearerApiRoute**: `/api/v1/*` — the public API has its own auth (Bearer token, see [[api]]), so the proxy lets these through without a session cookie. The route handler returns 401 itself if the key is missing or invalid. See [[conventions#api-routes--service-role]].
-- Icons (`/icon`, `/apple-icon`) go through the `proxy.ts` matcher which already excludes image extensions
 
 The service worker (`/sw.js`) is an explicit exemption: the browser fetches it without session cookies during registration, so the proxy would otherwise redirect the request to `/login` and the SW would never install. See [[conventions#pwa--minimal-service-worker-no-offline-cache]].
 

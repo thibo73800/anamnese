@@ -70,6 +70,15 @@ The app is online-only but ships a **minimal service worker** at `public/sw.js`.
 - Proxy exemption: `/sw.js` is listed as a public asset in `lib/supabase/proxy.ts` so the request reaches the file instead of being redirected to `/login`.
 - Install UX: `components/pwa/install-button.tsx` captures `beforeinstallprompt` on Chrome/Edge and exposes a manual trigger; on iOS Safari it falls back to a short "Share → Add to Home Screen" tutorial dialog. Rendered inside the mobile nav sheet (`components/app-nav.tsx`).
 
+**Manifest icons** (`app/manifest.ts`) must declare, at minimum, a **192×192** and a **512×512** PNG — both required by Chrome Android's installability criteria. A third entry with `purpose: 'maskable'` (also 512) is required for proper adaptive-icon rendering on Android launchers; its glyph must fit within the central ~80% safe zone (no `borderRadius`, content well inside the circle). Current icon routes:
+
+- `/icon` (512×512, `purpose: 'any'`) — `app/icon.tsx`
+- `/icon-192` (192×192, `purpose: 'any'`) — `app/icon-192/route.tsx`
+- `/icon-maskable` (512×512, `purpose: 'maskable'`) — `app/icon-maskable/route.tsx`
+- `/apple-icon` (180×180) — `app/apple-icon.tsx`, used only by iOS via auto-generated `<link rel="apple-touch-icon">`, not referenced from the manifest
+
+All four icon paths are listed in `lib/supabase/proxy.ts` `isPublicAsset` so Chrome can fetch them during install evaluation even when the visitor is logged out (e.g. on `/login`).
+
 Do not add offline caching to this SW. If offline becomes a requirement, it needs a dedicated design conversation — the current invariant assumes every request hits the network.
 
 ## Mobile navigation — hamburger + Sheet

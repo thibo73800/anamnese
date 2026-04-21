@@ -33,8 +33,10 @@ app/
 │   ├── theme.ts               # refineThemeExplanation (search follow-up Q&A)
 │   └── batch-create.ts        # sendBatchMessage, findImageForDraft, commitSet (/create batch chat)
 ├── layout.tsx                 # root layout, manifest, Toaster, SW registration
-├── manifest.ts                # dynamic PWA manifest
-├── icon.tsx / apple-icon.tsx  # icons generated via next/og
+├── manifest.ts                # dynamic PWA manifest (3 icon entries: 192, 512, 512-maskable)
+├── icon.tsx / apple-icon.tsx  # icons generated via next/og (512, 180)
+├── icon-192/route.tsx         # 192×192 icon (Chrome Android installability)
+├── icon-maskable/route.tsx    # 512×512 with safe-zone for Android adaptive launchers
 └── globals.css
 
 public/
