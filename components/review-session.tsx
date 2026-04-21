@@ -86,6 +86,10 @@ export function ReviewSession({ initialCards }: Props) {
     [queue, exhausted, refetchMore],
   )
 
+  const onCardUpdated = useCallback((updated: AnamneseCard) => {
+    setQueue((q) => q.map((c) => (c.id === updated.id ? updated : c)))
+  }, [])
+
   const headerStats = useMemo(() => {
     return `${reviewedCount} révisée${reviewedCount > 1 ? 's' : ''} · ${queue.length} en file`
   }, [queue.length, reviewedCount])
@@ -103,8 +107,8 @@ export function ReviewSession({ initialCards }: Props) {
           <Link href="/cards" className={buttonVariants({ variant: 'outline' })}>
             Mes cartes
           </Link>
-          <Link href="/create" className={buttonVariants()}>
-            + Nouveau set
+          <Link href="/explore" className={buttonVariants()}>
+            Explorer
           </Link>
         </div>
       </div>
@@ -124,9 +128,19 @@ export function ReviewSession({ initialCards }: Props) {
         </div>
       </div>
       {mode === 'qcm' ? (
-        <ReviewCardQcm key={current.id} card={current} onRate={onRate} />
+        <ReviewCardQcm
+          key={current.id}
+          card={current}
+          onRate={onRate}
+          onCardUpdated={onCardUpdated}
+        />
       ) : (
-        <ReviewCardTyping key={current.id} card={current} onRate={onRate} />
+        <ReviewCardTyping
+          key={current.id}
+          card={current}
+          onRate={onRate}
+          onCardUpdated={onCardUpdated}
+        />
       )}
     </div>
   )

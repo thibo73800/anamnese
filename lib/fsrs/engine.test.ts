@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { initCard, reviewCard } from './engine'
-import { deriveMode, TYPING_MODE_STABILITY_THRESHOLD_DAYS } from './mode'
+import { deriveMastery, deriveMode, TYPING_MODE_STABILITY_THRESHOLD_DAYS } from './mode'
 
 describe('FSRS engine', () => {
   it('initialise une carte neuve avec état New', () => {
@@ -59,5 +59,21 @@ describe('deriveMode', () => {
     const stubLow = { ...c, stability: TYPING_MODE_STABILITY_THRESHOLD_DAYS - 0.01 }
     expect(deriveMode(stubHigh)).toBe('typing')
     expect(deriveMode(stubLow)).toBe('qcm')
+  })
+})
+
+describe('deriveMastery', () => {
+  const base = initCard()
+  it.each([
+    [0, 'new'],
+    [1.99, 'new'],
+    [2, 'learning'],
+    [13.99, 'learning'],
+    [14, 'consolidated'],
+    [29.99, 'consolidated'],
+    [30, 'mastered'],
+    [365, 'mastered'],
+  ])('stability=%s → %s', (stability, level) => {
+    expect(deriveMastery({ ...base, stability }).level).toBe(level)
   })
 })

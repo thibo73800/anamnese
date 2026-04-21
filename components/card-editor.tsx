@@ -9,23 +9,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ImagePreview } from '@/components/image-preview'
-import {
-  createCard,
-  updateCard,
-  type CreateCardInput,
-} from '@/app/actions/cards'
+import { createCard, type CreateCardInput } from '@/app/actions/cards'
 import type { ImageSource } from '@/lib/types'
-
-type Mode =
-  | { kind: 'create' }
-  | { kind: 'edit'; cardId: string }
 
 type Props = {
   initial: CreateCardInput
-  mode?: Mode
 }
 
-export function CardEditor({ initial, mode = { kind: 'create' } }: Props) {
+export function CardEditor({ initial }: Props) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [term, setTerm] = useState(initial.term)
@@ -96,13 +87,8 @@ export function CardEditor({ initial, mode = { kind: 'create' } }: Props) {
           image_attribution: imageAttribution,
           explanation: initial.explanation,
         }
-        if (mode.kind === 'edit') {
-          await updateCard(mode.cardId, payload)
-          toast.success('Carte modifiée')
-        } else {
-          await createCard(payload)
-          toast.success('Carte créée')
-        }
+        await createCard(payload)
+        toast.success('Carte créée')
         router.push('/cards')
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Erreur inconnue')
@@ -114,12 +100,10 @@ export function CardEditor({ initial, mode = { kind: 'create' } }: Props) {
     <div className="space-y-4 rounded-lg border p-4">
       <div>
         <p className="text-xs uppercase tracking-wide text-muted-foreground">
-          {mode.kind === 'edit' ? 'Modifier la carte' : 'Nouvelle carte'}
+          Nouvelle carte
         </p>
         <p className="text-sm text-muted-foreground">
-          {mode.kind === 'edit'
-            ? 'Ajuste les champs puis enregistre.'
-            : 'Édite si besoin, puis valide pour ajouter à ton deck.'}
+          Édite si besoin, puis valide pour ajouter à ton deck.
         </p>
       </div>
 
@@ -258,13 +242,7 @@ export function CardEditor({ initial, mode = { kind: 'create' } }: Props) {
       </details>
 
       <Button onClick={onSubmit} disabled={pending} className="w-full">
-        {pending
-          ? mode.kind === 'edit'
-            ? 'Enregistrement…'
-            : 'Création…'
-          : mode.kind === 'edit'
-            ? 'Enregistrer'
-            : 'Créer la carte'}
+        {pending ? 'Création…' : 'Créer la carte'}
       </Button>
     </div>
   )

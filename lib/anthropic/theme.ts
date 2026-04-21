@@ -14,7 +14,7 @@ const ThemeExplanationSchema = z.object({
   card: z.object({
     term: z.string().max(80),
     definition: z.string(),
-    suggestedTags: z.array(z.string()).min(1).max(4),
+    suggestedTags: z.array(z.string()).min(1).max(2),
     distractors: z.array(z.string()).length(3),
   }),
 })
@@ -55,7 +55,10 @@ export async function refineExplanation(params: {
   return response.parsed_output.explanation
 }
 
-export async function explainTheme(theme: string): Promise<ThemeExplanation> {
+export async function explainTheme(
+  theme: string,
+  existingTags: string[],
+): Promise<ThemeExplanation> {
   const client = getAnthropic()
 
   const response = await client.messages.parse({
@@ -68,7 +71,7 @@ export async function explainTheme(theme: string): Promise<ThemeExplanation> {
         cache_control: { type: 'ephemeral' },
       },
     ],
-    messages: [{ role: 'user', content: THEME_EXPLAIN_USER(theme) }],
+    messages: [{ role: 'user', content: THEME_EXPLAIN_USER(theme, existingTags) }],
     output_config: { format: zodOutputFormat(ThemeExplanationSchema) },
   })
 

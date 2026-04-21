@@ -60,7 +60,7 @@ Images render via `<img src>` directly (not `next/image`) to avoid the `remotePa
 
 ## Custom URL
 
-In the `CardEditor` (create + edit) the user can:
+In the `CardEditor` (card creation from `/search`) and the `CardEditDialog` (editing an existing card from `/cards` or `/review`) the user can:
 - Remove the auto image ("Remove image" button) → `image_url` / `image_source` / `image_attribution` reset to `null`.
 - Paste a URL (input field) → replaces the auto image. `image_source` + `image_attribution` become `null` (no canonical source for an arbitrary URL).
 - Restore the auto image ("Restore auto image" button) → resets to the initial values.
@@ -69,7 +69,7 @@ Light validation: `z.string().url()` on the server action side. No MIME check (u
 
 ## Display: the `ImagePreview` component
 
-[`components/image-preview.tsx`](../components/image-preview.tsx) — used throughout (CardEditor, ReviewCardQcm, ReviewCardTyping):
+[`components/image-preview.tsx`](../components/image-preview.tsx) — used throughout (CardEditor, CardEditDialog, ReviewCardQcm, ReviewCardTyping):
 
 - Configurable fixed height (`heightClass`, default `h-56`) — stable layout.
 - `object-contain` **not** `object-cover` → no crop, original proportions respected.

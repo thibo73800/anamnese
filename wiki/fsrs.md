@@ -28,17 +28,40 @@ If you edit `fsrs_state` manually (debug), keep the same format — any non-ISO-
 [`lib/fsrs/mode.ts`](../lib/fsrs/mode.ts)
 
 ```ts
-export const TYPING_MODE_STABILITY_THRESHOLD_DAYS = 7
+export const TYPING_MODE_STABILITY_THRESHOLD_DAYS = 2
 
-deriveMode(state) → 'typing' if stability >= 7, else 'qcm'
+deriveMode(state) → 'typing' if stability >= 2, else 'qcm'
 ```
 
 **Why `stability`** and not `reps`:
 - `reps` ignores answer quality (3 Good in a row ≠ 3 Again)
 - `stability` predicts how many days the card will stay retained → a direct measure of "how well it's learned"
-- If only "Again" is rated, stability stays < 7 and the card stays in QCM → desired behavior
+
+**Why such a low threshold (2 days)**:
+FSRS calibrates `stability` on the grades it receives. If the card stays in QCM for many reviews, every grade reflects *recognition* from 4 choices — an easier task than free recall. The resulting `stability` then overestimates typing-level retention.
+By switching to typing very early (after ~1 successful QCM), we:
+- Keep QCM as a brief familiarization phase (the user sees definition, image, distractors once)
+- Force the bulk of calibration to happen on the real retrieval signal
+- Accept that early typings will fail more often — those Agains are legitimate signal, not noise
+
+If only "Again" is rated, `stability` stays < 2 and the card stays in QCM — correct behavior (the user never graduated out of familiarization).
 
 Tweak the threshold: change the constant, nothing else needs touching. Existing cards will flip automatically the next time `deriveMode` is called.
+
+## Mastery levels
+
+[`lib/fsrs/mode.ts`](../lib/fsrs/mode.ts) exposes `deriveMastery(state)` returning `{ level, label }` based on `stability`:
+
+| Level | `stability` (days) | Label (FR) | Meaning |
+|---|---|---|---|
+| `new` | < 2 | Nouvelle | QCM familiarization phase |
+| `learning` | 2 – 14 | Apprentissage | Typing active, stability being calibrated |
+| `consolidated` | 14 – 30 | Consolidée | Typing reliable |
+| `mastered` | ≥ 30 | Maîtrisée | Mature, long-interval retention (Anki-mature territory) |
+
+The lower boundary (2) matches the QCM→typing threshold so "leaving the red palier" visually matches "unlocking typing". Rendered on the cards list via [`components/mastery-badge.tsx`](../components/mastery-badge.tsx) — replaces the former QCM/Saisie badge since the mode is now implicit in the mastery level.
+
+Note: `lapses` is intentionally ignored in v1 (simpler single-rule mapping). If cards with many lapses end up mis-classified in practice, add a "Difficile" override.
 
 ## Rating UI
 
@@ -85,7 +108,8 @@ After reveal, if `card.explanation` is non-null, an "i" icon button opens a mark
 - Easy > Good on `stability`
 - JSON round-trip preserves behavior
 - `deriveMode` returns `qcm` on a fresh card
-- `deriveMode` flips exactly at `stability >= 7`
+- `deriveMode` flips exactly at `stability >= 2`
+- `deriveMastery` returns the 4 expected levels across the boundaries (0, 2, 14, 30)
 
 `npm test` to re-run.
 

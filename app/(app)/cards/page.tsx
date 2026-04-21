@@ -2,8 +2,10 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { DeleteCardButton } from '@/components/delete-card-button'
+import { EditCardButton } from '@/components/edit-card-button'
+import { MasteryBadge } from '@/components/mastery-badge'
 import { listCards, listAllTags } from '@/app/actions/cards'
-import { deriveMode, isDue } from '@/lib/fsrs/mode'
+import { isDue } from '@/lib/fsrs/mode'
 
 export default async function CardsPage({
   searchParams,
@@ -61,7 +63,6 @@ export default async function CardsPage({
         <ul className="space-y-3">
           {cards.map((card) => {
             const due = isDue(card.fsrs_state, now)
-            const mode = deriveMode(card.fsrs_state)
             return (
               <li
                 key={card.id}
@@ -72,9 +73,7 @@ export default async function CardsPage({
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-medium">{card.term}</h3>
                       {due && <Badge variant="destructive">À réviser</Badge>}
-                      <Badge variant="outline" className="text-xs">
-                        {mode === 'typing' ? 'Saisie' : 'QCM'}
-                      </Badge>
+                      <MasteryBadge fsrsState={card.fsrs_state} />
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
                       {card.definition}
@@ -90,15 +89,7 @@ export default async function CardsPage({
                     )}
                   </div>
                   <div className="flex shrink-0 items-start gap-1">
-                    <Link
-                      href={`/cards/${card.id}/edit`}
-                      className={buttonVariants({
-                        variant: 'ghost',
-                        size: 'sm',
-                      })}
-                    >
-                      Modifier
-                    </Link>
+                    <EditCardButton card={card} />
                     <DeleteCardButton cardId={card.id} term={card.term} />
                   </div>
                 </div>

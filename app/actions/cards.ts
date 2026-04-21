@@ -52,15 +52,21 @@ export async function createCard(input: CreateCardInput): Promise<{ id: string }
   return res
 }
 
-const updateSchema = createSchema.omit({ theme: true, distractors: true })
+const updateSchema = createSchema.omit({ theme: true })
 
 export async function updateCard(
   cardId: string,
-  input: Omit<CreateCardInput, 'theme' | 'distractors'>,
+  input: Omit<CreateCardInput, 'theme'>,
 ): Promise<void> {
   const parsed = updateSchema.parse(input)
   const ctx = await currentCtx()
-  await repoUpdateCard(ctx, cardId, parsed)
+  const { distractors, ...rest } = parsed
+  await repoUpdateCard(ctx, cardId, {
+    ...rest,
+    qcm_choices: {
+      distractors: [distractors[0], distractors[1], distractors[2]],
+    },
+  })
   revalidatePath('/cards')
   revalidatePath('/review')
 }

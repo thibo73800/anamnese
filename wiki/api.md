@@ -110,9 +110,9 @@ Keys are created, listed, and revoked from `/settings/api-keys` (Server Actions 
 
 Schema in [[data-model#publicapi_keys]]. Hashing rationale: SHA-256 (the raw key carries 160 bits of uniform entropy, so slow-KDFs like bcrypt/argon2 are unnecessary — this is the Stripe / GitHub PAT pattern).
 
-## Claude Code skill
+## Claude Code skills
 
-Packaged at `skills/anamnese/`. Install via symlink (`ln -s $(pwd)/skills/anamnese ~/.claude/skills/anamnese`). The skill's `SKILL.md` references this page as the authoritative endpoint reference.
+The repo ships a `skills/anamnese/` skill that consumes this API (push, edit, list cards from any Claude Code conversation). Catalog and install instructions live in [[skills#skillsanamnese]]. The skill's `SKILL.md` references this page as the authoritative endpoint reference.
 
 ## See also
 

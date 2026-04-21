@@ -27,6 +27,7 @@ export type UpdateCardPatch = Partial<{
   image_source: ImageSource | null
   image_attribution: string | null
   explanation: string | null
+  qcm_choices: { distractors: [string, string, string] }
 }>
 
 export interface ListCardsOpts {
@@ -34,6 +35,15 @@ export interface ListCardsOpts {
   limit?: number
   since?: string
   cursor?: string
+}
+
+export interface RecentStudyCard {
+  id: string
+  term: string
+  definition: string
+  theme: string | null
+  tags: string[]
+  last_reviewed_at: string
 }
 
 export interface CardStats {
@@ -214,6 +224,56 @@ export async function repoGetStats(ctx: CardRepoCtx): Promise<CardStats> {
     review_count_7d: reviewRows.data?.length ?? 0,
     ratings_7d: ratings,
   }
+}
+
+export async function repoGetRecentStudyProfile(
+  ctx: CardRepoCtx,
+  limit = 100,
+): Promise<RecentStudyCard[]> {
+  const safeLimit = Math.max(1, Math.min(300, Math.trunc(limit)))
+  const { data: reviews, error: revErr } = await ctx.supabase
+    .from('reviews')
+    .select('card_id, reviewed_at')
+    .eq('user_id', ctx.userId)
+    .order('reviewed_at', { ascending: false })
+    .limit(safeLimit * 4)
+  if (revErr) throw new Error(revErr.message)
+
+  const orderedIds: string[] = []
+  const firstSeen = new Map<string, string>()
+  for (const r of reviews ?? []) {
+    if (!firstSeen.has(r.card_id)) {
+      firstSeen.set(r.card_id, r.reviewed_at as string)
+      orderedIds.push(r.card_id as string)
+      if (orderedIds.length >= safeLimit) break
+    }
+  }
+  if (orderedIds.length === 0) return []
+
+  const { data: cards, error: cardErr } = await ctx.supabase
+    .from('cards')
+    .select('id, term, definition, theme, tags')
+    .eq('user_id', ctx.userId)
+    .in('id', orderedIds)
+  if (cardErr) throw new Error(cardErr.message)
+
+  const byId = new Map<string, { id: string; term: string; definition: string; theme: string | null; tags: string[] }>()
+  for (const c of cards ?? []) byId.set(c.id as string, c as { id: string; term: string; definition: string; theme: string | null; tags: string[] })
+
+  const out: RecentStudyCard[] = []
+  for (const id of orderedIds) {
+    const c = byId.get(id)
+    if (!c) continue
+    out.push({
+      id: c.id,
+      term: c.term,
+      definition: c.definition,
+      theme: c.theme,
+      tags: c.tags ?? [],
+      last_reviewed_at: firstSeen.get(id)!,
+    })
+  }
+  return out
 }
 
 function stateNumFromString(s: string): number {

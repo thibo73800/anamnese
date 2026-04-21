@@ -2,7 +2,7 @@
 
 # Anamnèse — context for Claude
 
-Memorization / general-knowledge / flashcard PWA. Flow: search a theme → LLM explanation (markdown, follow-up Q&A possible) + image → flashcard (term + definition + stored explanation) → FSRS review. **Card orientation**: we show the **definition** and the user guesses the **term** (4-choice MCQ while `stability < 7d`, free text input afterwards).
+Memorization / general-knowledge / flashcard PWA. Flow: search a theme → LLM explanation (markdown, follow-up Q&A possible) + image → flashcard (term + definition + stored explanation) → FSRS review. **Card orientation**: we show the **definition** and the user guesses the **term** (4-choice MCQ while `stability < 2d` — short familiarization phase — free text input afterwards so FSRS calibrates `stability` on the real retrieval signal).
 
 ## Documentation language
 
@@ -50,7 +50,8 @@ Detailed documentation lives in [`wiki/`](./wiki/). It describes **the current s
 - FSRS / review modes: [`wiki/fsrs.md`](./wiki/fsrs.md)
 - Image pipeline: [`wiki/images-pipeline.md`](./wiki/images-pipeline.md)
 - Claude prompts: [`wiki/llm-prompts.md`](./wiki/llm-prompts.md)
-- Public REST API (Bearer-auth'd) + Claude Code skill: [`wiki/api.md`](./wiki/api.md)
+- Public REST API (Bearer-auth'd): [`wiki/api.md`](./wiki/api.md)
+- Claude Code skills shipped with the repo (`.claude/skills/project-review/`, `skills/anamnese/`): [`wiki/skills.md`](./wiki/skills.md)
 - Setup / migrations / deployment / troubleshooting: [`wiki/operations.md`](./wiki/operations.md)
 - **Cross-cutting conventions and invariants**: [`wiki/conventions.md`](./wiki/conventions.md) ← scan at the start of every session
 

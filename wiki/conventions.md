@@ -95,10 +95,24 @@ Images render via `<img src>` directly, **not `next/image`**. The Google CSE sou
 
 Display: `object-contain` + fixed configurable height. **Not** `object-cover` (systematic crop on non-16:9). See `components/image-preview.tsx`.
 
+## Volatile sessions — no persistence (except opt-in add-to-deck)
+
+The `/explore` flow (home page suggested themes → QCM test) uses **ephemeral cards that never touch Supabase**, with one explicit exception: the user can choose to persist a specific volatile card via the Add-to-deck dialog, which calls the regular `createCard` Server Action — producing a brand-new `AnamneseCard`, not converting the volatile one.
+
+Invariants:
+
+- `VolatileCard` ([`lib/types.ts`](../lib/types.ts)) has no `user_id`, no `fsrs_state`, no `created_at`. Its `id` is a `crypto.randomUUID()` minted by `startVolatileSession` ([`app/actions/suggestions.ts`](../app/actions/suggestions.ts)) — not a DB row.
+- The QCM component used in volatile sessions ([`components/volatile-review-session.tsx`](../components/volatile-review-session.tsx)) is **not** the shared `review-card-qcm.tsx` — it contains a minimal local variant without the mid-review edit/explanation/image UI (different concerns: no persisted fields to mutate). Don't unify them.
+- `startVolatileSession` reads the study profile (via `repoGetRecentStudyProfile`) but never writes to `cards` / `reviews`. Zero `reviews` rows are inserted during a volatile session — including on wrong answers. FSRS scheduling is bypassed entirely. The only DB writes happen through the opt-in Add-to-deck path, which uses the standard `createCard` → `cards` table.
+- **Card key includes `reviewedCount`**: `<VolatileQcmCard key={`${card.id}-${reviewedCount}`} />`. Required because re-inserting a wrong answer on a single-card queue keeps the same `card.id` at the head, which would otherwise preserve stale UI state and leave the user stuck on their wrong selection.
+- **Shared tags** (2-5) are generated alongside the cards and passed through `startVolatileSession` → `VolatileReviewSession` → `AddVolatileCardDialog` to pre-fill the tag input. They stay stable across restarts via `previousSharedTags`.
+- **Restart semantics**: on session end with `E > 0` errors, the client calls `startVolatileSession({ theme, count, keepCards, previousSharedTags })`. The server generates `count - keepCards.length` fresh cards with `excludeTerms = keepCards.map(c => c.term)` passed to the prompt, then concatenates and reshuffles. Preserves error cards + shared tags; introduces fresh angles for the remaining slots.
+- **Suggestion cache**: `daily_suggestions` table holds one row per user with today's 6 themes. Consumed themes are lazily replaced on the next home page load (see [[llm-prompts#theme-suggest-prompt-home-page-suggestions]]). Missing-table errors are swallowed so the feature degrades to uncached behavior.
+
 ## FSRS — re-insertion & card orientation
 
 - **Re-insertion at end of queue**: only when `rating === 1` (Again). Any other rating removes the card from the current session; it will reappear at the next `getDueCards` once its FSRS `due` has passed. Rule motivated by UI/DB alignment — no more cards "stuck" locally while no longer due in DB.
-- **Card orientation**: the **definition** is shown, the user must recall the **term**. QCM if `stability < 7d`, free typing otherwise. Active recall of the term from the concept is pedagogically stronger than recognition.
+- **Card orientation**: the **definition** is shown, the user must recall the **term**. QCM if `stability < 2d` (brief familiarization), free typing otherwise. Active recall of the term from the concept is pedagogically stronger than recognition — and the low threshold ensures FSRS calibrates `stability` on a typing signal, not on the easier QCM signal.
 
 See `lib/fsrs/engine.ts`, `lib/fsrs/mode.ts`, `components/review-session.tsx`.
 

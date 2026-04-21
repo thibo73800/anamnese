@@ -16,7 +16,7 @@ import {
 import { InstallButton } from '@/components/pwa/install-button'
 
 const NAV_LINKS: Array<{ href: string; label: string }> = [
-  { href: '/create', label: 'Créer un set' },
+  { href: '/explore', label: 'Explorer' },
   { href: '/cards', label: 'Cartes' },
   { href: '/review', label: 'Révision' },
   { href: '/settings/api-keys', label: 'Paramètres' },

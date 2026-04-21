@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { CardEditDialog } from '@/components/card-edit-dialog'
 import { ImagePreview } from '@/components/image-preview'
 import { ExplanationInfo } from '@/components/explanation-info'
 import type { AnamneseCard, Rating } from '@/lib/types'
@@ -11,9 +13,10 @@ import { RatingButtons } from './rating-buttons'
 type Props = {
   card: AnamneseCard
   onRate: (rating: Rating, responseText?: string) => Promise<void>
+  onCardUpdated: (updated: AnamneseCard) => void
 }
 
-export function ReviewCardTyping({ card, onRate }: Props) {
+export function ReviewCardTyping({ card, onRate, onCardUpdated }: Props) {
   const [answer, setAnswer] = useState('')
   const [revealed, setRevealed] = useState(false)
 
@@ -55,9 +58,21 @@ export function ReviewCardTyping({ card, onRate }: Props) {
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Terme</p>
                 <p className="mt-1 text-xl font-semibold">{card.term}</p>
               </div>
-              {card.explanation && (
-                <ExplanationInfo term={card.term} explanation={card.explanation} />
-              )}
+              <div className="flex shrink-0 items-center gap-1">
+                {card.explanation && (
+                  <ExplanationInfo term={card.term} explanation={card.explanation} />
+                )}
+                <CardEditDialog card={card} onSaved={onCardUpdated}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Corriger la carte"
+                  >
+                    <Pencil className="text-muted-foreground" />
+                  </Button>
+                </CardEditDialog>
+              </div>
             </div>
             {card.image_url && (
               <div className="mt-3">

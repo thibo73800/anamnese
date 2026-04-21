@@ -7,6 +7,8 @@ import { SearchBar } from '@/components/search-bar'
 import { SearchResult } from '@/components/search-result'
 import { explainTheme } from '@/lib/anthropic/theme'
 import { findImage } from '@/lib/images'
+import { createClient } from '@/lib/supabase/server'
+import { repoListTags } from '@/lib/cards/repository'
 
 export default async function SearchPage({
   searchParams,
@@ -32,9 +34,17 @@ export default async function SearchPage({
 }
 
 async function SearchResultLoader({ theme }: { theme: string }) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const existingTags = user
+    ? await repoListTags({ supabase, userId: user.id })
+    : []
+
   let explanation
   try {
-    explanation = await explainTheme(theme)
+    explanation = await explainTheme(theme, existingTags)
   } catch (err) {
     return (
       <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">

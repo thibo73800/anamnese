@@ -11,19 +11,21 @@ Primary consumer: Claude in a future session. Navigation optimized for "quickly 
 | Page | Content | Keywords |
 |---|---|---|
 | [[conventions]] | Transverse invariants to scan at the start of a session | Next 16 proxy, Server Actions, UTC dates, shadcn, cookies, FSRS Again-only, qcm_choices, rate limit, Anthropic keys, PWA no-cache SW, mobile nav |
-| [[architecture]] | Next.js App Router breakdown, key components, create / review / batch flows | App Router, RSC, Server Actions, BatchCreator, ReviewSession |
+| [[architecture]] | Next.js App Router breakdown, key components, search / review / explore flows | App Router, RSC, Server Actions, SeedAngles, ReviewSession, VolatileReviewSession |
 | [[data-model]] | Postgres schema, indexes, RLS, `updated_at` trigger, migrations | cards, reviews, fsrs_state, qcm_choices, RLS, GIN, ISO-8601 |
 | [[auth-flow]] | Signup/login/logout, PKCE callback, proxy guards, admin scripts, Supabase config | Supabase Auth, PKCE, emailRedirectTo, Redirect URLs, service_role |
 | [[fsrs]] | `ts-fsrs` wrapper, rating, QCM→typing threshold, client-side queue, tests | FSRS-4.5, stability, deriveMode, ReviewSession, Again |
 | [[images-pipeline]] | Orchestrator Wikimedia → Unsplash → Google CSE, storage, ImagePreview | findImage, ImageHit, object-contain, attribution, custom URL |
-| [[llm-prompts]] | Sonnet 4.6 client, `theme-explain`, `theme-refine`, batch tool use, costs | Anthropic SDK, Zod structured output, prompt cache, tool use |
+| [[llm-prompts]] | Sonnet 4.6 client, `theme-explain`, `theme-refine`, `theme-suggest`, `theme-angles`, `volatile-cards`, distractors, costs | Anthropic SDK, Zod structured output, prompt cache |
 | [[operations]] | Setup, migrations, Vercel deployment, troubleshooting, credential rotation | .env.local, Dashboard SQL Editor, Vercel, email rate limit |
 | [[api]] | Public REST surface — Bearer auth, endpoints, Zod schemas, error codes | `/api/v1/*`, api_keys, SHA-256, Claude Code skill |
+| [[skills]] | Claude Code skills shipped with the repo — locations, install, scope | `.claude/skills/project-review` (auto), `skills/anamnese` (user-symlink), `/project-review` |
 
 ## If you're looking for…
 
 - **Create a user without the email flow** → [[auth-flow#admin-scripts-signup-bypass]]
-- **Add cards from outside the PWA (Claude Code, curl, …)** → [[api]] + `skills/anamnese/SKILL.md`
+- **Add cards from outside the PWA (Claude Code, curl, …)** → [[api]] + [[skills#skillsanamnese]]
+- **Run a pre-commit code review** → [[skills#claudeskillsproject-review-project-level]] (`/project-review`, auto-loaded in this repo)
 - **Generate or revoke an API key** → `/settings/api-keys` in the app; schema in [[data-model#publicapi_keys]]
 - **Apply a SQL migration** → [[operations#db-migration]]
 - **Why the SQL index refuses the `::timestamptz` cast** → [[conventions#dates--serialization]] + [[data-model#why-no-timestamptz-cast-in-the-index]]

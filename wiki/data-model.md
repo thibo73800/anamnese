@@ -63,6 +63,19 @@ Review history (audit, future analytics, potential undo).
 | `reviewed_at` | timestamptz default now() | |
 | `previous_state`, `new_state` | jsonb | FSRS snapshots before/after |
 
+### `public.daily_suggestions`
+
+Per-user snapshot of the 6 themes shown on the home page for the current day. Avoids regenerating via Claude on every page visit.
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | uuid PK FK on delete cascade | one row per user, upserted |
+| `date` | date | Day the snapshot was produced (UTC). If mismatched with today → regenerate |
+| `themes` | jsonb | Array of `{ label, kind: 'deepen'\|'related', rationale, consumed: boolean }` |
+| `updated_at` | timestamptz default now() | Maintained by `set_updated_at` trigger |
+
+**Consumption model**: when the user starts a volatile session on a theme, `consumeSuggestedTheme` flips that theme's `consumed: true`. On the next home page load, `getSuggestedThemes` detects consumed slots, calls Claude to regenerate **only** those slots (with `excludeLabels` set to all current labels), merges back and saves. The 6 themes visible on screen are always non-consumed.
+
 ## Indexes
 
 ```sql
@@ -91,6 +104,7 @@ Postgres requires indexed expressions to be `IMMUTABLE`. The `text::timestamptz`
 ```sql
 alter table cards enable row level security;
 alter table reviews enable row level security;
+alter table daily_suggestions enable row level security;
 
 create policy "cards: owner full access"
   on cards for all
@@ -99,6 +113,11 @@ create policy "cards: owner full access"
 
 create policy "reviews: owner full access"
   on reviews for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "daily_suggestions: owner full access"
+  on daily_suggestions for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 ```

@@ -1,27 +1,30 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
+import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CardEditDialog } from '@/components/card-edit-dialog'
 import { ImagePreview } from '@/components/image-preview'
 import { ExplanationInfo } from '@/components/explanation-info'
+import { seededShuffle } from '@/lib/seeded-shuffle'
 import type { AnamneseCard, Rating } from '@/lib/types'
 import { RatingButtons } from './rating-buttons'
 
 type Props = {
   card: AnamneseCard
   onRate: (rating: Rating, responseText?: string) => Promise<void>
+  onCardUpdated: (updated: AnamneseCard) => void
 }
 
-export function ReviewCardQcm({ card, onRate }: Props) {
+export function ReviewCardQcm({ card, onRate, onCardUpdated }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
-
-  const choices = useMemo(() => {
-    const arr = [card.term, ...card.qcm_choices.distractors]
-    return shuffle(arr, card.id)
-  }, [card])
+  const [correctTerm] = useState(card.term)
+  const [choices] = useState(() =>
+    seededShuffle([card.term, ...card.qcm_choices.distractors], card.id),
+  )
 
   const revealed = selected !== null
-  const isCorrect = selected === card.term
+  const isCorrect = selected === correctTerm
 
   return (
     <div className="space-y-4">
@@ -43,7 +46,7 @@ export function ReviewCardQcm({ card, onRate }: Props) {
       <div className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">Quel est le terme ?</p>
         {choices.map((choice) => {
-          const isThisCorrect = choice === card.term
+          const isThisCorrect = choice === correctTerm
           const isThisSelected = choice === selected
           let className =
             'w-full justify-start whitespace-normal h-auto min-h-[44px] py-3 text-left'
@@ -73,9 +76,21 @@ export function ReviewCardQcm({ card, onRate }: Props) {
                 ? 'Bien vu. Note ta confiance pour ajuster la prochaine révision.'
                 : 'Pas juste. La bonne réponse est surlignée en vert.'}
             </p>
-            {card.explanation && (
-              <ExplanationInfo term={card.term} explanation={card.explanation} />
-            )}
+            <div className="flex shrink-0 items-center gap-1">
+              {card.explanation && (
+                <ExplanationInfo term={card.term} explanation={card.explanation} />
+              )}
+              <CardEditDialog card={card} onSaved={onCardUpdated}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Corriger la carte"
+                >
+                  <Pencil className="text-muted-foreground" />
+                </Button>
+              </CardEditDialog>
+            </div>
           </div>
           <RatingButtons onRate={(rating) => onRate(rating)} />
         </div>
@@ -84,31 +99,3 @@ export function ReviewCardQcm({ card, onRate }: Props) {
   )
 }
 
-function shuffle<T>(arr: T[], seed: string): T[] {
-  const rng = mulberry32(hash(seed))
-  const out = [...arr]
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1))
-    ;[out[i], out[j]] = [out[j], out[i]]
-  }
-  return out
-}
-
-function hash(s: string): number {
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i)
-    h = Math.imul(h, 16777619)
-  }
-  return h >>> 0
-}
-
-function mulberry32(a: number) {
-  return function () {
-    a |= 0
-    a = (a + 0x6d2b79f5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}

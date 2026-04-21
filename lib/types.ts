@@ -55,15 +55,25 @@ export interface ThemeExplanation {
   }
 }
 
-export interface DraftCard {
-  localId: string
+export interface VolatileCard {
+  id: string
   term: string
   definition: string
-  distractors: [string, string, string]
-  image: ImageHit | null
+  qcm_choices: { distractors: [string, string, string] }
 }
 
-export interface DisplayMessage {
-  role: 'user' | 'assistant'
-  text: string
+export type SuggestedThemeKind = 'deepen' | 'related'
+
+export interface SuggestedTheme {
+  label: string
+  kind: SuggestedThemeKind
+  rationale: string
+}
+
+export type ThemeAngleKind = 'main' | 'angle'
+
+export interface ThemeAngle {
+  label: string
+  kind: ThemeAngleKind
+  rationale: string
 }
