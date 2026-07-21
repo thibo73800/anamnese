@@ -1,5 +1,7 @@
 import { Suspense } from 'react'
 import { SearchBar } from '@/components/search-bar'
+import { ProgressRecap } from '@/components/progress-recap'
+import { ProgressRecapSkeleton } from '@/components/progress-recap-skeleton'
 import { SuggestedThemes } from '@/components/suggested-themes'
 import { SuggestedThemesSkeleton } from '@/components/suggested-themes-skeleton'
 
@@ -17,6 +19,10 @@ export default function HomePage() {
         </div>
         <SearchBar />
       </div>
+
+      <Suspense fallback={<ProgressRecapSkeleton />}>
+        <ProgressRecap />
+      </Suspense>
 
       <Suspense fallback={<SuggestedThemesSkeleton />}>
         <SuggestedThemes />

@@ -9,10 +9,12 @@ import { deriveMode } from '@/lib/fsrs/mode'
 import {
   repoCreateCard,
   repoDeleteCard,
+  repoGetProgressRecap,
   repoListCards,
   repoListTags,
   repoUpdateCard,
   type CreateCardData,
+  type ProgressRecap,
 } from '@/lib/cards/repository'
 import type { AnamneseCard, Rating } from '@/lib/types'
 
@@ -184,6 +186,12 @@ export async function submitReview(params: {
   if (insertRes.error) throw new Error(insertRes.error.message)
 
   revalidatePath('/cards')
+  revalidatePath('/')
 
   return { nextCard: { ...card, fsrs_state: next } }
+}
+
+export async function getProgressRecap(): Promise<ProgressRecap> {
+  const ctx = await currentCtx()
+  return repoGetProgressRecap(ctx)
 }

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { initCard } from '@/lib/fsrs/engine'
+import { initCard, normalizeCard } from '@/lib/fsrs/engine'
+import { deriveMastery, masteryFromStability } from '@/lib/fsrs/mode'
 import type { AnamneseCard, ImageSource } from '@/lib/types'
 
 export interface CardRepoCtx {
@@ -53,6 +54,32 @@ export interface CardStats {
   learning_count: number
   review_count_7d: number
   ratings_7d: { again: number; hard: number; good: number; easy: number }
+}
+
+export interface MasteryHistogram {
+  new: number
+  learning: number
+  consolidated: number
+  mastered: number
+}
+
+export interface ProgressPoint {
+  /** ISO de la borne hebdomadaire. */
+  t: string
+  /** Cartes distinctes déjà révisées à cette date (cumul). */
+  seen: number
+  /** Cartes dont la dernière `stability` connue ≥ 30j à cette date. */
+  mastered: number
+}
+
+export interface ProgressRecap {
+  total_cards: number
+  due_count: number
+  histogram: MasteryHistogram
+  /** Série temporelle ; `[]` quand trop peu de reviews pour tracer une courbe. */
+  series: ProgressPoint[]
+  ratings_7d: { again: number; hard: number; good: number; easy: number }
+  phase: 'learn' | 'consolidate'
 }
 
 function rowFromCreate(userId: string, data: CreateCardData) {
@@ -224,6 +251,153 @@ export async function repoGetStats(ctx: CardRepoCtx): Promise<CardStats> {
     review_count_7d: reviewRows.data?.length ?? 0,
     ratings_7d: ratings,
   }
+}
+
+// Heuristique de phase — seuils ajustables.
+const PHASE_DUE_BACKLOG_RATIO = 0.2 // backlog de révisions rapporté aux cartes non maîtrisées
+const PHASE_AGAIN_RATIO = 0.3 // part d'échecs récents (rating "Again", 7 j)
+const RECAP_DEFAULT_WEEKS = 12 // largeur de la fenêtre de la courbe
+const REVIEWS_SCAN_CAP = 20000 // borne dure sur le rejeu d'historique (perf)
+const WEEK_MS = 7 * 24 * 3600 * 1000
+
+/**
+ * Récap de progression pour la page d'accueil : histogramme de maîtrise courant,
+ * courbe reconstruite depuis `reviews`, et signal apprendre/consolider.
+ *
+ * Approximation assumée : `stability` n'est recalculée qu'au moment d'une review,
+ * donc la maîtrise à une date passée = `masteryFromStability(dernier new_state ≤ t)`,
+ * la stability étant considérée plate entre deux reviews. Suffisant pour un récap.
+ */
+export async function repoGetProgressRecap(
+  ctx: CardRepoCtx,
+  opts?: { weeks?: number },
+): Promise<ProgressRecap> {
+  const weeks = Math.max(1, Math.min(52, Math.trunc(opts?.weeks ?? RECAP_DEFAULT_WEEKS)))
+  const now = Date.now()
+  const nowIso = new Date(now).toISOString()
+  const sevenDaysAgo = new Date(now - WEEK_MS).toISOString()
+
+  const [totalRes, dueRes, stateRows, ratingRows, historyRows] = await Promise.all([
+    ctx.supabase
+      .from('cards')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', ctx.userId),
+    ctx.supabase
+      .from('cards')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', ctx.userId)
+      .lte('fsrs_state->>due', nowIso),
+    ctx.supabase
+      .from('cards')
+      .select('fsrs_state')
+      .eq('user_id', ctx.userId),
+    ctx.supabase
+      .from('reviews')
+      .select('rating')
+      .eq('user_id', ctx.userId)
+      .gte('reviewed_at', sevenDaysAgo),
+    // Historique complet (borné) pour reconstruire la courbe — 3 colonnes légères.
+    ctx.supabase
+      .from('reviews')
+      .select('card_id, reviewed_at, new_state')
+      .eq('user_id', ctx.userId)
+      .order('reviewed_at', { ascending: true })
+      .limit(REVIEWS_SCAN_CAP),
+  ])
+
+  if (totalRes.error) throw new Error(totalRes.error.message)
+  if (dueRes.error) throw new Error(dueRes.error.message)
+  if (stateRows.error) throw new Error(stateRows.error.message)
+  if (ratingRows.error) throw new Error(ratingRows.error.message)
+  if (historyRows.error) throw new Error(historyRows.error.message)
+
+  const histogram: MasteryHistogram = { new: 0, learning: 0, consolidated: 0, mastered: 0 }
+  for (const row of stateRows.data ?? []) {
+    histogram[deriveMastery(row.fsrs_state).level]++
+  }
+
+  const ratings = { again: 0, hard: 0, good: 0, easy: 0 }
+  for (const row of ratingRows.data ?? []) {
+    switch (row.rating) {
+      case 1: ratings.again++; break
+      case 2: ratings.hard++; break
+      case 3: ratings.good++; break
+      case 4: ratings.easy++; break
+    }
+  }
+
+  const series = reconstructProgressSeries(
+    (historyRows.data ?? []) as HistoryRow[],
+    now,
+    weeks,
+  )
+
+  const nonMastered = histogram.new + histogram.learning + histogram.consolidated
+  const total7d = ratings.again + ratings.hard + ratings.good + ratings.easy
+  const againRatio = total7d > 0 ? ratings.again / total7d : 0
+  const phase: 'learn' | 'consolidate' =
+    (nonMastered > 0 && (dueRes.count ?? 0) >= PHASE_DUE_BACKLOG_RATIO * nonMastered) ||
+    againRatio > PHASE_AGAIN_RATIO
+      ? 'consolidate'
+      : 'learn'
+
+  return {
+    total_cards: totalRes.count ?? 0,
+    due_count: dueRes.count ?? 0,
+    histogram,
+    series,
+    ratings_7d: ratings,
+    phase,
+  }
+}
+
+interface HistoryRow {
+  card_id: string
+  reviewed_at: string
+  new_state: unknown
+}
+
+/**
+ * Rejoue tout l'historique des reviews (ordre chronologique) et prend un snapshot
+ * à chaque borne hebdomadaire de la fenêtre `[now - weeks, now]`. Les reviews
+ * antérieures à la fenêtre alimentent quand même la map (cartes comptées en "vues").
+ * Retourne `[]` s'il y a moins de 2 bornes non vides (courbe non pertinente).
+ */
+function reconstructProgressSeries(
+  rows: HistoryRow[],
+  now: number,
+  weeks: number,
+): ProgressPoint[] {
+  const boundaries: number[] = []
+  for (let i = 0; i <= weeks; i++) boundaries.push(now - (weeks - i) * WEEK_MS)
+
+  const latestStability = new Map<string, number>()
+  const series: ProgressPoint[] = []
+  let bi = 0
+
+  const snapshot = (t: number): ProgressPoint => {
+    let mastered = 0
+    for (const s of latestStability.values()) {
+      if (masteryFromStability(s).level === 'mastered') mastered++
+    }
+    return { t: new Date(t).toISOString(), seen: latestStability.size, mastered }
+  }
+
+  for (const row of rows) {
+    const rt = Date.parse(row.reviewed_at)
+    while (bi < boundaries.length && boundaries[bi] < rt) {
+      series.push(snapshot(boundaries[bi]))
+      bi++
+    }
+    latestStability.set(row.card_id, normalizeCard(row.new_state).stability)
+  }
+  while (bi < boundaries.length) {
+    series.push(snapshot(boundaries[bi]))
+    bi++
+  }
+
+  if (series.filter((p) => p.seen > 0).length < 2) return []
+  return series
 }
 
 export async function repoGetRecentStudyProfile(

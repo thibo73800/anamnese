@@ -61,7 +61,19 @@ Tweak the threshold: change the constant, nothing else needs touching. Existing 
 
 The lower boundary (2) matches the QCM→typing threshold so "leaving the red palier" visually matches "unlocking typing". Rendered on the cards list via [`components/mastery-badge.tsx`](../components/mastery-badge.tsx) — replaces the former QCM/Saisie badge since the mode is now implicit in the mastery level.
 
+`deriveMastery` delegates the bucketing to a pure `masteryFromStability(stability: number)` (same file), so a bare stability number can be classified without a full FSRS `Card` (used by the home-page progress recap's history replay). The four mastery colors live once in [`lib/fsrs/mastery-colors.ts`](../lib/fsrs/mastery-colors.ts) (`MASTERY_BADGE` / `MASTERY_BAR` / `MASTERY_LABEL` / `MASTERY_ORDER`), consumed by both `MasteryBadge` and the recap meter.
+
 Note: `lapses` is intentionally ignored in v1 (simpler single-rule mapping). If cards with many lapses end up mis-classified in practice, add a "Difficile" override.
+
+## Home-page progress recap
+
+[`components/progress-recap.tsx`](../components/progress-recap.tsx) (async RSC under `<Suspense>` on the home page, above the theme suggestions) surfaces where the user stands. Data comes from `getProgressRecap()` ([`app/actions/cards.ts`](../app/actions/cards.ts)) → `repoGetProgressRecap(ctx)` ([`lib/cards/repository.ts`](../lib/cards/repository.ts)), returning `ProgressRecap`:
+
+- **`histogram`** — current count per mastery level (via `deriveMastery` over every card's `fsrs_state`). Rendered as a segmented meter + legend.
+- **`series`** — weekly time-series (default 12 weeks) reconstructed by replaying the full `reviews` history (`card_id, reviewed_at, new_state`, capped at 20 000 rows): a `Map<card_id, stability>` is folded forward and snapshotted at each UTC week boundary → `{ t, seen (cumulative distinct cards reviewed), mastered (latest stability ≥ 30) }`. Rendered as a hand-rolled inline-SVG two-line curve (cards seen vs mastered). **Approximation**: stability is only recomputed at review time, so past mastery = `masteryFromStability(latest new_state ≤ t)` (flat between reviews). `series` is `[]` (curve hidden) when fewer than 2 non-empty week boundaries.
+- **`phase`** — `'learn' | 'consolidate'`. Tunable heuristic in `repoGetProgressRecap`: `consolidate` when the due backlog is ≥ 20% of non-mastered cards **or** the 7-day Again ratio > 30%; otherwise `learn`. No new-card quota system is introduced. `submitReview` calls `revalidatePath('/')` so the recap refreshes after each review.
+
+All aggregation is JS-side (consistent with `repoGetStats`); `stability` is never cast/filtered in SQL (unindexed JSONB text).
 
 ## Rating UI
 

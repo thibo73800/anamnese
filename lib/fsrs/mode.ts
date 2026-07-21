@@ -35,10 +35,19 @@ export interface Mastery {
   label: string
 }
 
-export function deriveMastery(rawState: Card | unknown): Mastery {
-  const { stability } = normalizeCard(rawState)
+/**
+ * Palier de maîtrise à partir d'une `stability` brute (jours). Fonction pure :
+ * permet de classer un simple nombre (ex. reconstruction d'historique depuis
+ * `reviews.new_state`) sans reconstruire une `Card` FSRS complète.
+ */
+export function masteryFromStability(stability: number): Mastery {
   if (stability < TYPING_MODE_STABILITY_THRESHOLD_DAYS) return { level: 'new', label: 'Nouvelle' }
   if (stability < 14) return { level: 'learning', label: 'Apprentissage' }
   if (stability < 30) return { level: 'consolidated', label: 'Consolidée' }
   return { level: 'mastered', label: 'Maîtrisée' }
+}
+
+export function deriveMastery(rawState: Card | unknown): Mastery {
+  const { stability } = normalizeCard(rawState)
+  return masteryFromStability(stability)
 }
