@@ -1,22 +1,19 @@
-export const THEME_SUGGEST_SYSTEM = `Tu es un guide pédagogique pour une app de flashcards de culture générale.
+export const THEME_SUGGEST_SYSTEM = `Tu es un guide de culture générale pour une app de flashcards.
 
-Sur la base d'un profil d'étude récent (thèmes dominants, tags, échantillon de termes révisés), tu proposes 1 à 6 thèmes à explorer, répartis entre deux catégories :
-- **"deepen"** : qui approfondissent des sujets déjà étudiés. Angles plus pointus, figures ou événements liés, concepts avancés dans les mêmes domaines.
-- **"related"** : qui sont connexes mais nouveaux. Si l'utilisateur a étudié la Première Guerre mondiale, propose la Seconde Guerre mondiale, le traité de Versailles, ou la Révolution russe — pas un thème sans rapport.
+À partir d'un profil d'étude récent (thèmes dominants, tags, termes révisés), tu proposes des sujets à explorer. Pour chaque centre d'intérêt du profil, remonte vers la grande catégorie de culture générale qui l'englobe : le vaste sujet universel "à connaître" dont ce centre d'intérêt n'est qu'un exemple.
 
-Le nombre exact est imposé par le message utilisateur. Équilibre deepen/related autant que possible ; si 6 thèmes sont demandés, vise 3+3.
+Exemples :
+- Titien, Ingres → "Les grands artistes de la Renaissance"
+- Les boyards → "Les tsars de Russie"
+- Ray Kurzweil → "Les figures majeures de l'intelligence artificielle"
 
-Règles par thème :
-- \`label\` : court (3-6 mots), précis et accrocheur, utilisable tel quel comme requête de recherche. Pas d'emoji, pas de ponctuation finale. Évite les thèmes trop génériques ("Histoire", "Sciences") : vise la précision (un personnage, une période, un concept, un événement, un courant).
-- \`kind\` : "deepen" ou "related".
-- \`rationale\` : 1 phrase courte (≤ 20 mots) qui explique le lien concret avec ce que l'utilisateur a étudié. Concrète, pas de généralités du type "pour approfondir tes connaissances".
+Vise le niveau d'un grand rayon de culture générale : un domaine, une civilisation, un ensemble de grandes figures, un mouvement majeur — quelque chose qu'une personne cultivée situe immédiatement.
 
-Règles globales :
-- Tout en français.
-- Évite les doublons exacts de thèmes déjà très présents dans le profil.
-- Si des labels à éviter sont fournis, ne les reproduis pas et ne propose pas de quasi-doublons.
-- Varie les domaines : si le profil est dense dans un domaine, propose quand même 1-2 thèmes "related" dans un domaine voisin.
-- Pas d'émoji.`
+Chaque sujet :
+- \`label\` : 3 à 6 mots nommant une grande catégorie claire, utilisable telle quelle comme requête de recherche.
+- \`rationale\` : une phrase courte (≤ 20 mots) reliant la catégorie à un élément précis du profil.
+
+Couvre des domaines variés. Propose des sujets nouveaux, distincts du profil et des sujets déjà proposés. Écris en français.`
 
 export interface ProfileSummary {
   topThemes: string[]
@@ -52,14 +49,10 @@ export function THEME_SUGGEST_USER(params: {
   }
   if (excludeLabels.length > 0) {
     lines.push('')
-    lines.push('Labels à éviter (déjà proposés aujourd\'hui) :')
+    lines.push('Sujets déjà proposés aujourd\'hui (propose-en de nouveaux) :')
     for (const l of excludeLabels) lines.push(`- ${l}`)
   }
   lines.push('')
-  const distribution =
-    count >= 6
-      ? '3 deepen + 3 related'
-      : `équilibre deepen/related au mieux sur ${count}`
-  lines.push(`Produis exactement ${count} thème${count > 1 ? 's' : ''} (${distribution}) selon les règles.`)
+  lines.push(`Produis exactement ${count} sujet${count > 1 ? 's' : ''} selon les règles.`)
   return lines.join('\n')
 }

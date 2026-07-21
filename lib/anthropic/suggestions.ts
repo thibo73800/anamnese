@@ -14,7 +14,6 @@ function buildSchema(count: number) {
       .array(
         z.object({
           label: z.string().min(1).max(80),
-          kind: z.enum(['deepen', 'related']),
           rationale: z.string().min(1).max(200),
         }),
       )

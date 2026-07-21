@@ -169,7 +169,7 @@ The server wrapper (`proposeThemeAngles`) enforces the 1-main + 5-angle split. I
 
 [`lib/anthropic/prompts/theme-suggest.ts`](../lib/anthropic/prompts/theme-suggest.ts) + [`lib/anthropic/suggestions.ts`](../lib/anthropic/suggestions.ts)
 
-Called by `getSuggestedThemes()` ([`app/actions/suggestions.ts`](../app/actions/suggestions.ts)) to populate the bottom section of the home page with 6 tailored themes.
+Called by `getSuggestedThemes()` ([`app/actions/suggestions.ts`](../app/actions/suggestions.ts)) to populate the bottom section of the home page with 6 tailored themes ("Idées à explorer"). The prompt does *generalization*: for each profile interest, it rebounds to the **broad, universal general-culture category** that interest belongs to (Titien → "Les grands artistes de la Renaissance", boyards → "Les tsars de Russie"), aiming for the level of a general-culture "shelf" rather than a specific instance. Written in a positive, concise style (states what to do, no ❌ examples).
 
 ### Input
 
@@ -199,12 +199,11 @@ Structured via `client.messages.parse` + `zodOutputFormat`. Schema length is der
 ```ts
 { themes: [{
     label: string.min(1).max(80),
-    kind: 'deepen' | 'related',
     rationale: string.min(1).max(200)
   }].length(count) }
 ```
 
-For `count = 6`: prompt targets **3 deepen + 3 related**. For partial regeneration (`count < 6`), the prompt asks Claude to balance as best it can on the remaining budget.
+All suggestions are a single kind (related/broadening) — there is no `kind` field. For `count = 6`, the prompt asks for 6 themes; for partial regeneration (`count < 6`), the same rules apply to the remaining budget.
 
 ### Fallback (profile too small)
 

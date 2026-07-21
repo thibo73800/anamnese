@@ -62,11 +62,8 @@ export interface VolatileCard {
   qcm_choices: { distractors: [string, string, string] }
 }
 
-export type SuggestedThemeKind = 'deepen' | 'related'
-
 export interface SuggestedTheme {
   label: string
-  kind: SuggestedThemeKind
   rationale: string
 }
 

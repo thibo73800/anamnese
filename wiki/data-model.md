@@ -71,7 +71,7 @@ Per-user snapshot of the 6 themes shown on the home page for the current day. Av
 |---|---|---|
 | `user_id` | uuid PK FK on delete cascade | one row per user, upserted |
 | `date` | date | Day the snapshot was produced (UTC). If mismatched with today → regenerate |
-| `themes` | jsonb | Array of `{ label, kind: 'deepen'\|'related', rationale, consumed: boolean }` |
+| `themes` | jsonb | Array of `{ label, rationale, consumed: boolean }` (older rows may still carry a legacy `kind` field, ignored on read) |
 | `updated_at` | timestamptz default now() | Maintained by `set_updated_at` trigger |
 
 **Consumption model**: when the user starts a volatile session on a theme, `consumeSuggestedTheme` flips that theme's `consumed: true`. On the next home page load, `getSuggestedThemes` detects consumed slots, calls Claude to regenerate **only** those slots (with `excludeLabels` set to all current labels), merges back and saves. The 6 themes visible on screen are always non-consumed.

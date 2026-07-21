@@ -18,12 +18,12 @@ import type { SuggestedTheme, ThemeAngle, VolatileCard } from '@/lib/types'
 const MIN_PROFILE_CARDS = 10
 
 const FALLBACK_THEMES: SuggestedTheme[] = [
-  { label: 'Renaissance italienne', kind: 'related', rationale: "Foyer artistique et intellectuel qui a redéfini l'Europe moderne." },
-  { label: 'Révolution française', kind: 'related', rationale: 'Événement charnière qui éclaire toute la politique contemporaine.' },
-  { label: 'Mécanique quantique', kind: 'related', rationale: 'Pilier de la physique moderne, riche en concepts contre-intuitifs.' },
-  { label: 'Mythologie grecque', kind: 'related', rationale: 'Matrice de références utilisée en littérature, art et psychologie.' },
-  { label: 'Impressionnisme', kind: 'related', rationale: "Rupture picturale qui a inventé la peinture moderne à la fin du XIXᵉ siècle." },
-  { label: 'Guerre froide', kind: 'related', rationale: 'Grille de lecture des rapports de force du XXᵉ siècle.' },
+  { label: 'Renaissance italienne', rationale: "Foyer artistique et intellectuel qui a redéfini l'Europe moderne." },
+  { label: 'Révolution française', rationale: 'Événement charnière qui éclaire toute la politique contemporaine.' },
+  { label: 'Mécanique quantique', rationale: 'Pilier de la physique moderne, riche en concepts contre-intuitifs.' },
+  { label: 'Mythologie grecque', rationale: 'Matrice de références utilisée en littérature, art et psychologie.' },
+  { label: 'Impressionnisme', rationale: "Rupture picturale qui a inventé la peinture moderne à la fin du XIXᵉ siècle." },
+  { label: 'Guerre froide', rationale: 'Grille de lecture des rapports de force du XXᵉ siècle.' },
 ]
 
 async function currentCtx() {
@@ -77,7 +77,7 @@ function todayIso(): string {
 }
 
 function stripStored(t: StoredTheme): SuggestedTheme {
-  return { label: t.label, kind: t.kind, rationale: t.rationale }
+  return { label: t.label, rationale: t.rationale }
 }
 
 function isMissingTableError(err: { code?: string; message?: string } | null | undefined): boolean {
