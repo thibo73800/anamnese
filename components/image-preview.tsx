@@ -13,6 +13,7 @@ type Props = {
   attribution?: string | null
   heightClass?: string
   className?: string
+  showAttribution?: boolean
 }
 
 export function ImagePreview({
@@ -21,8 +22,10 @@ export function ImagePreview({
   attribution,
   heightClass = 'h-56',
   className,
+  showAttribution = true,
 }: Props) {
   const [open, setOpen] = useState(false)
+  const caption = showAttribution ? attribution : null
 
   return (
     <>
@@ -41,9 +44,9 @@ export function ImagePreview({
             loading="lazy"
           />
         </button>
-        {attribution && (
+        {caption && (
           <figcaption className="bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
-            {attribution}
+            {caption}
           </figcaption>
         )}
       </figure>
@@ -58,9 +61,9 @@ export function ImagePreview({
               alt={alt}
               className="max-h-[85vh] w-auto max-w-full rounded-md object-contain"
             />
-            {attribution && (
+            {caption && (
               <p className="text-center text-xs text-muted-foreground">
-                {attribution}
+                {caption}
               </p>
             )}
           </div>

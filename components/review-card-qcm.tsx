@@ -37,6 +37,7 @@ export function ReviewCardQcm({ card, onRate, onCardUpdated }: Props) {
               url={card.image_url}
               alt=""
               attribution={card.image_attribution}
+              showAttribution={revealed}
               heightClass="h-48"
             />
           </div>
