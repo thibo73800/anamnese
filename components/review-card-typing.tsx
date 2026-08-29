@@ -5,6 +5,7 @@ import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { CardEditDialog } from '@/components/card-edit-dialog'
+import { DeleteCardButton } from '@/components/delete-card-button'
 import { ImagePreview } from '@/components/image-preview'
 import { ExplanationInfo } from '@/components/explanation-info'
 import type { AnamneseCard, Rating } from '@/lib/types'
@@ -14,9 +15,10 @@ type Props = {
   card: AnamneseCard
   onRate: (rating: Rating, responseText?: string) => Promise<void>
   onCardUpdated: (updated: AnamneseCard) => void
+  onCardDeleted: (cardId: string) => void
 }
 
-export function ReviewCardTyping({ card, onRate, onCardUpdated }: Props) {
+export function ReviewCardTyping({ card, onRate, onCardUpdated, onCardDeleted }: Props) {
   const [answer, setAnswer] = useState('')
   const [revealed, setRevealed] = useState(false)
 
@@ -72,6 +74,11 @@ export function ReviewCardTyping({ card, onRate, onCardUpdated }: Props) {
                     <Pencil className="text-muted-foreground" />
                   </Button>
                 </CardEditDialog>
+                <DeleteCardButton
+                  cardId={card.id}
+                  term={card.term}
+                  onDeleted={onCardDeleted}
+                />
               </div>
             </div>
             {card.image_url && (

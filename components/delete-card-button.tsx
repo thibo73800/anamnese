@@ -17,7 +17,18 @@ import {
 } from '@/components/ui/dialog'
 import { deleteCard } from '@/app/actions/cards'
 
-export function DeleteCardButton({ cardId, term }: { cardId: string; term: string }) {
+type Props = {
+  cardId: string
+  term: string
+  /**
+   * Called after a successful delete. When provided, the caller owns the
+   * post-delete update (e.g. removing the card from a client-side review
+   * queue) and the default `router.refresh()` is skipped.
+   */
+  onDeleted?: (cardId: string) => void
+}
+
+export function DeleteCardButton({ cardId, term, onDeleted }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -27,7 +38,8 @@ export function DeleteCardButton({ cardId, term }: { cardId: string; term: strin
       try {
         await deleteCard(cardId)
         setOpen(false)
-        router.refresh()
+        if (onDeleted) onDeleted(cardId)
+        else router.refresh()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Erreur')
       }

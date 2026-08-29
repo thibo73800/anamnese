@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardEditDialog } from '@/components/card-edit-dialog'
+import { DeleteCardButton } from '@/components/delete-card-button'
 import { ImagePreview } from '@/components/image-preview'
 import { ExplanationInfo } from '@/components/explanation-info'
 import { seededShuffle } from '@/lib/seeded-shuffle'
@@ -14,9 +15,10 @@ type Props = {
   card: AnamneseCard
   onRate: (rating: Rating, responseText?: string) => Promise<void>
   onCardUpdated: (updated: AnamneseCard) => void
+  onCardDeleted: (cardId: string) => void
 }
 
-export function ReviewCardQcm({ card, onRate, onCardUpdated }: Props) {
+export function ReviewCardQcm({ card, onRate, onCardUpdated, onCardDeleted }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
   const [correctTerm] = useState(card.term)
   const [choices] = useState(() =>
@@ -91,6 +93,11 @@ export function ReviewCardQcm({ card, onRate, onCardUpdated }: Props) {
                   <Pencil className="text-muted-foreground" />
                 </Button>
               </CardEditDialog>
+              <DeleteCardButton
+                cardId={card.id}
+                term={card.term}
+                onDeleted={onCardDeleted}
+              />
             </div>
           </div>
           <RatingButtons onRate={(rating) => onRate(rating)} />

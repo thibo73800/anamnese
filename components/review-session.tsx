@@ -90,6 +90,18 @@ export function ReviewSession({ initialCards }: Props) {
     setQueue((q) => q.map((c) => (c.id === updated.id ? updated : c)))
   }, [])
 
+  const onCardDeleted = useCallback(
+    (cardId: string) => {
+      const projectedLength = queue.length - 1
+      setQueue((q) => q.filter((c) => c.id !== cardId))
+
+      if (projectedLength <= PREFETCH_THRESHOLD && !exhausted) {
+        void refetchMore()
+      }
+    },
+    [queue.length, exhausted, refetchMore],
+  )
+
   const headerStats = useMemo(() => {
     return `${reviewedCount} révisée${reviewedCount > 1 ? 's' : ''} · ${queue.length} en file`
   }, [queue.length, reviewedCount])
@@ -133,6 +145,7 @@ export function ReviewSession({ initialCards }: Props) {
           card={current}
           onRate={onRate}
           onCardUpdated={onCardUpdated}
+          onCardDeleted={onCardDeleted}
         />
       ) : (
         <ReviewCardTyping
@@ -140,6 +153,7 @@ export function ReviewSession({ initialCards }: Props) {
           card={current}
           onRate={onRate}
           onCardUpdated={onCardUpdated}
+          onCardDeleted={onCardDeleted}
         />
       )}
     </div>
